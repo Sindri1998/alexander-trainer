@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turret Layout Planner</title>
+<style>
+  :root{
+    --surface-0:#eef1f4;
+    --surface-1:#ffffff;
+    --surface-2:#e6ebf0;
+    --line:#d3dae1;
+    --line-strong:#b3bec8;
+    --text-primary:#10171d;
+    --text-secondary:#4a5760;
+    --text-muted:#78858f;
+    --brand:#004990;           /* Alexander Machine Shop blue */
+    --brand-deep:#00376d;
+    --brand-ink:#ffffff;
+    --accent:#004990;
+    --accent-soft:#e2ecf7;
+    --accent-ink:#00376d;
+    --on-accent:#ffffff;
+    --path:#2f7dc4;
+    --pin-ring:#c98a00;
+    --blocked:#333c44;
+    --good:#1a7f37;
+    --warn:#c1272d;
+    --bad:#c1272d;
+    --rule-met:#5b6870;
+    --rad-red:#c1272d;         /* RAD MFG badge */
+    --rad-grey:#5b6870;
+    --radius:6px;
+    --shadow:0 1px 2px rgba(16,23,29,.06);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:where(:not([data-theme="light"])){
+      --surface-0:#0d1218;
+      --surface-1:#161c22;
+      --surface-2:#202832;
+      --line:#2c353f;
+      --line-strong:#46525d;
+      --text-primary:#f2f5f8;
+      --text-secondary:#b3c0cb;
+      --text-muted:#8595a1;
+      --brand:#004990;
+      --brand-deep:#00376d;
+      --accent:#4a9eea;
+      --accent-soft:#16283c;
+      --accent-ink:#9ecbf5;
+    --on-accent:#08121c;
+      --on-accent:#08121c;
+      --path:#4a9eea;
+      --pin-ring:#e0a728;
+      --blocked:#0a0e12;
+      --good:#46b56a;
+      --warn:#e4595e;
+      --bad:#e4595e;
+      --rule-met:#7d8b96;
+      --rad-red:#e4595e;
+      --rad-grey:#8595a1;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --surface-0:#0d1218;
+    --surface-1:#161c22;
+    --surface-2:#202832;
+    --line:#2c353f;
+    --line-strong:#46525d;
+    --text-primary:#f2f5f8;
+    --text-secondary:#b3c0cb;
+    --text-muted:#8595a1;
+    --brand:#004990;
+    --brand-deep:#00376d;
+    --accent:#4a9eea;
+    --accent-soft:#16283c;
+    --accent-ink:#9ecbf5;
+    --path:#4a9eea;
+    --pin-ring:#e0a728;
+    --blocked:#0a0e12;
+    --good:#46b56a;
+    --warn:#e4595e;
+    --bad:#e4595e;
+    --rule-met:#7d8b96;
+    --rad-red:#e4595e;
+    --rad-grey:#8595a1;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--surface-0);color:var(--text-primary);
+    font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  header{
+    background:var(--brand);border-bottom:3px solid var(--brand-deep);
+    padding:0;display:block;
+  }
+  .brandbar{display:flex;align-items:center;gap:12px;padding:6px 14px;flex-wrap:wrap}
+  .wordmark{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+  .wordmark .co{
+    color:#fff;font-size:13.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;
+  }
+  .wordmark .tool{color:#b8d3ec;font-size:10.5px;letter-spacing:.05em}
+  .radbadge{
+    display:inline-flex;align-items:center;gap:0;border-radius:3px;overflow:hidden;
+    font-size:10px;font-weight:800;letter-spacing:.09em;flex:0 0 auto;
+  }
+  .radbadge .r{background:var(--rad-red);color:#fff;padding:3px 6px}
+  .radbadge .m{background:#d7dde3;color:#2c353f;padding:3px 6px}
+  .brandbar .spacer{flex:1}
+  .brandbar .ttl{color:#dbe7f3;font-size:12.5px;letter-spacing:.02em;white-space:nowrap}
+  #themeBtn{
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;
+    padding:5px 10px;font-size:12px;border-radius:var(--radius);
+  }
+  #themeBtn:hover{background:rgba(255,255,255,.22)}
+  .subbar{
+    background:var(--surface-1);border-bottom:1px solid var(--line);
+    padding:7px 20px;color:var(--text-secondary);font-size:12.5px;
+  }
+  .subbar b{color:var(--text-primary);font-weight:650}
+  html,body{height:100%}
+  body{overflow:hidden;display:flex;flex-direction:column}
+  header{flex:0 0 auto}
+  .wrap{
+    flex:1 1 auto;min-height:0;display:grid;
+    grid-template-columns:214px 1.65fr 0.82fr 1.05fr;
+    gap:10px;padding:10px;align-items:stretch;
+  }
+  .col{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;overflow:hidden}
+  .col > .card{margin:0;min-height:0;overflow:auto;flex:0 1 auto}
+  .col > .card.grow{flex:1 1 auto}
+  .col > .layout-grid{flex:1 1 auto;min-height:0}
+  .mapcard{display:flex;flex-direction:column;min-height:0;overflow:hidden!important;height:100%}
+  .mapcard svg{flex:1 1 auto;min-height:0;width:100%;height:100%;max-width:none}
+  @media (min-width:1181px) and (max-width:1460px){
+    .wrap{grid-template-columns:186px 1.95fr 0.74fr 0.88fr;gap:7px;padding:7px}
+    #toolTable input{font-size:11.5px}
+    #toolTable input[data-k="ins"]{font-size:10.5px}
+  }
+  @media (max-width:1180px){body{overflow:auto}.wrap{grid-template-columns:1fr;height:auto}.mapcard{height:auto}.mapcard svg{height:auto;max-height:56vh}}
+  .card{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius);padding:11px 12px;margin-bottom:0;box-shadow:var(--shadow)}
+  .card h2{
+    font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);font-weight:800;
+    margin:0 0 8px;padding-bottom:5px;border-bottom:2px solid var(--surface-2);
+  }
+  :root[data-theme="dark"] .card h2{color:var(--accent-ink)}
+  @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .card h2{color:var(--accent-ink)}}
+  label{display:block;font-size:11.5px;color:var(--text-secondary);margin-bottom:3px}
+  input[type=text],input[type=number],select,textarea{
+    width:100%;padding:6px 8px;border:1px solid var(--line-strong);border-radius:var(--radius);
+    background:var(--surface-1);color:var(--text-primary);font:inherit;font-size:13px;
+  }
+  textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+  .row{display:flex;gap:7px;align-items:flex-end;margin-bottom:8px}
+  .row>*{flex:1;min-width:0}
+  button{
+    font:inherit;font-size:12.5px;padding:6px 10px;border-radius:var(--radius);border:1px solid var(--line-strong);
+    background:var(--surface-2);color:var(--text-primary);cursor:pointer;white-space:nowrap;
+  }
+  button:hover{background:var(--line)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:hover{background:var(--brand-deep);border-color:var(--brand-deep)}
+  button.mini{padding:5px 9px;font-size:13px;line-height:1.1}
+  .btnrow{display:flex;gap:6px;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:2px 3px;border-bottom:1px solid var(--line)}
+  td{padding:2px 3px;border-bottom:1px solid var(--surface-2);vertical-align:middle}
+  td input,td select{padding:4px 5px;font-size:12.5px;min-width:0}
+  #toolTable{table-layout:fixed}
+  #toolTable input[data-k="ins"],#toolTable input[data-k="loc"]{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;padding-left:4px;padding-right:2px}
+  #toolTable td select{padding-left:4px;padding-right:0}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;min-height:34px;padding:6px;background:var(--surface-2);border-radius:6px;overflow:auto}
+  .chips.dragging-in{background:var(--surface-2);outline:1px dashed var(--line-strong);outline-offset:-2px}
+  .chip{
+    display:inline-flex;align-items:center;gap:4px;background:var(--surface-1);border:1px solid var(--line-strong);
+    border-radius:20px;padding:2px 4px 2px 7px;font-size:12px;cursor:grab;touch-action:none;user-select:none;
+    transition:box-shadow .12s,transform .12s;
+  }
+  .chip:hover{border-color:var(--accent)}
+  .chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .chip .grip{color:var(--line-strong);font-size:11px;letter-spacing:-2px;line-height:1;cursor:grab}
+  .chip:hover .grip{color:var(--accent)}
+  .chip.dragging{
+    cursor:grabbing;opacity:.92;transform:scale(1.06);border-color:var(--accent);
+    box-shadow:0 4px 12px rgba(0,0,0,.18);background:var(--accent-soft);
+  }
+  .chip.dragging .grip{color:var(--accent)}
+  .chip .n{color:var(--text-muted);font-size:10px;font-variant-numeric:tabular-nums}
+  .chip button{border:none;background:transparent;padding:0 5px;color:var(--text-muted);font-size:15px;line-height:1}
+  .chip button:hover{color:var(--bad);background:transparent}
+  .rule{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:center;margin-bottom:7px}
+  .rule select,.rule input{padding:4px 5px;font-size:12px}
+  .rulestat{grid-column:1/-1;font-size:11px;margin:0 0 6px 2px;display:flex;align-items:center;gap:5px}
+  .rulestat.ok{color:var(--good)}
+  .rulestat.bad{color:var(--warn);font-weight:600}
+  .rulestat.idle{color:var(--text-muted)}
+  .modebtn .flag{font-size:10px;font-weight:700;color:var(--warn);letter-spacing:.02em;display:block;margin-top:2px}
+  .modebar{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:8px}
+  .modebtn{
+    text-align:left;padding:7px 9px;border:1.5px solid var(--line);border-radius:var(--radius);
+    background:var(--surface-1);cursor:pointer;position:relative;transition:border-color .12s,background .12s;
+  }
+  .modebtn:hover{background:var(--surface-2);border-color:var(--line-strong)}
+  .modebtn .mk{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:flex;align-items:center;gap:4px;padding-right:30px;line-height:1.25}
+  .modebtn .mv{font-size:19px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.2}
+  .modebtn .mu{font-size:10px;color:var(--text-muted);font-weight:400}
+  .modebtn.active{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+  .modebtn.active .mk{color:var(--accent-ink);font-weight:800}
+  .modebtn.active .mv{color:var(--accent-ink)}
+  .modebtn.disabled{opacity:.5;cursor:not-allowed}
+  .modebtn .dot{width:8px;height:8px;border-radius:50%;background:var(--line-strong);flex:0 0 auto}
+  .modebtn.active .dot{background:var(--accent)}
+  .modebtn .best{position:absolute;top:6px;right:8px;font-size:9px;font-weight:700;color:var(--good);letter-spacing:.03em}
+  .tickbox{
+    appearance:none;-webkit-appearance:none;margin:0;width:14px;height:14px;
+    border:1.5px solid var(--line-strong);border-radius:3px;background:var(--surface-1);
+    cursor:pointer;display:inline-block;vertical-align:-2px;position:relative;
+  }
+  .tickbox:hover{border-color:var(--accent)}
+  .tickbox:checked{background:var(--accent);border-color:var(--accent)}
+  .tickbox:checked::after{
+    content:"\2713";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--on-accent);font-size:11px;font-weight:800;line-height:1;
+  }
+  td.chk{text-align:center;padding-left:2px;padding-right:2px}
+  td.ins{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-secondary)}
+  td.ins .rule{display:block;border-bottom:1px dotted var(--line-strong);height:11px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:6px}
+  .stat{background:var(--surface-2);border-radius:5px;padding:5px 8px}
+  .stat .k{font-size:9.5px;white-space:nowrap;overflow:hidden;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+  .stat .v{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.15}
+  .stat .u{font-size:10px;color:var(--text-secondary);font-weight:400}
+  .stat.good .v{color:var(--good)}
+  .note{font-size:11px;color:var(--text-muted);margin-top:7px;line-height:1.4}
+  .err{color:var(--warn);font-size:11.5px;margin-top:7px;font-weight:600}
+  svg{display:block;width:100%;height:auto;max-width:780px;margin:0 auto}
+  .layout-grid{display:grid;grid-template-columns:1fr;gap:10px}
+  .listwrap{display:flex;gap:10px}
+  .listwrap > .scroll{flex:1;min-width:0}
+  .half2{display:none}
+  .legend{display:flex;gap:9px;flex-wrap:wrap;font-size:10.5px;color:var(--text-secondary);justify-content:center;margin-top:4px;flex:0 0 auto}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .tag{font-size:10px;padding:1px 5px;border-radius:3px;background:var(--accent-soft);color:var(--accent-ink);font-weight:700}
+  .tag.pin{background:transparent;color:var(--pin-ring);border:1px solid var(--pin-ring)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+  .scroll{max-height:none;overflow:visible}
+  details summary{cursor:pointer;font-size:11.5px;color:var(--text-secondary);user-select:none;padding:3px 0}
+  .swatchrow{display:flex;flex-wrap:wrap;gap:5px}
+  .sw{width:24px;height:24px;border-radius:4px;border:1px solid var(--line-strong);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;background:var(--surface-1);color:var(--text-secondary)}
+  .sw.blocked{background:var(--blocked);color:#fff;border-color:var(--blocked)}
+  #tip{position:fixed;pointer-events:none;background:var(--brand-deep);color:#fff;padding:5px 8px;border-radius:5px;font-size:12px;opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap}
+  .printonly{display:none}
+  .screen-hide{display:none!important}
+  @media print{
+    @page{margin:12mm}
+    :root, :root[data-theme="dark"], :root[data-theme="light"]{
+      --surface-0:#fff;--surface-1:#fff;--surface-2:#f0f0f0;
+      --text-primary:#000;--text-secondary:#222;--text-muted:#555;
+      --line:#bbb;--line-strong:#888;--accent:#004990;--on-accent:#fff;
+      --path:#7aa5cc;--blocked:#444;--pin-ring:#a06f00;--rule-met:#666;--bad:#a3201f;
+      color-scheme:light;
+    }
+    html,body{height:auto;overflow:visible;display:block}
+    body{background:#fff}
+    .col{display:block}
+    .col > .card{overflow:visible}
+    .mapcard{display:block;height:auto;overflow:visible!important}
+    .mapcard svg{height:auto}
+    header,.subbar,.noprint,.print-hide{display:none!important}
+    .printonly{display:block}
+    .screen-hide:not(.print-hide){display:block!important}
+    .wrap{display:block;padding:0;gap:0}
+    .card{border:none;box-shadow:none;padding:0;margin:0 0 8px;break-inside:avoid}
+    .card h2{
+      font-size:10px!important;letter-spacing:.1em;color:#000!important;
+      border-bottom:1px solid #000;padding-bottom:4px;margin-bottom:8px;
+    }
+    .layout-grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+    .scroll{max-height:none!important;overflow:visible!important}
+    svg{max-width:100%}
+    table{font-size:11px}
+    td,th{padding:1.5px 5px}
+    td{border-bottom:1px solid #ddd}
+    #layoutTable,#layoutTable2{table-layout:fixed;width:100%}
+    .listwrap th:nth-child(1),.listwrap td:nth-child(1){width:5%}
+    .listwrap th:nth-child(2),.listwrap td:nth-child(2){width:9%}
+    .listwrap th:nth-child(3),.listwrap td:nth-child(3){width:31%}
+    .listwrap th:nth-child(4),.listwrap td:nth-child(4){width:29%}
+    .listwrap th:nth-child(5),.listwrap td:nth-child(5){width:26%}
+    .listwrap td:nth-child(2){font-weight:700}
+    /* setup sheet: tick, station, tool, insert — no use count, no pin marker */
+    .listwrap th:nth-child(6),.listwrap td:nth-child(6){display:none}
+    td.ins{white-space:nowrap;overflow:hidden}
+    .listwrap .tag{display:none}
+    .tickbox{
+      width:13px;height:13px;border:1.2px solid #000;border-radius:2px;background:#fff;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+    .tickbox:checked{background:#004990;border-color:#004990}
+    .tickbox:checked::after{color:#fff}
+    td.ins{color:#000;font-size:11px}
+    td.ins .rule{border-bottom:1px dotted #999}
+    #diagram g.pinned circle{stroke:none!important;stroke-width:0!important}
+    /* short lists stack so the map fills the page; long lists stay side-by-side */
+    .layout-grid{grid-template-columns:1fr!important;gap:8px}
+    body.stn-few #diagram{max-height:78mm}
+    body.stn-few table{font-size:12px}
+    body.stn-few td,body.stn-few th{padding:2.5px 6px}
+    body.stn-many #diagram{max-height:74mm}
+    body.stn-many table{font-size:10.5px}
+    body.stn-many td,body.stn-many th{padding:1.4px 4px}
+    body.stn-many td.ins{font-size:9px;white-space:normal}
+    body.split-list .half2{display:block}
+    body.split-list .listwrap{gap:7mm}
+    #printHead{margin:0 0 10px;border-bottom:2px solid #004990;padding-bottom:6px}
+    #printHead .ph-top{display:flex;align-items:baseline;gap:10px}
+    #printHead .ph-co{font-size:14px;font-weight:800;letter-spacing:.1em;color:#004990;text-transform:uppercase}
+    #printHead .ph-rad{font-size:9px;font-weight:800;letter-spacing:.09em;color:#666;margin-left:auto}
+    #printHead .ph-title{font-size:12px;font-weight:700;margin-top:2px}
+    #printHead .ph-meta{font-size:11px;color:#333;margin-top:2px}
+    #printFoot{
+      display:block;position:fixed;left:0;right:0;bottom:0;background:#fff;
+      border-top:3px solid #004990;padding-top:10px;
+    }
+    #printFoot .pf-row{display:flex;align-items:flex-end;gap:14px}
+    #printFoot .pf-lab{
+      font-size:19px;font-weight:800;letter-spacing:.1em;color:#000;white-space:nowrap;line-height:1;
+    }
+    #printFoot .pf-date{margin-left:16px}
+    #printFoot .pf-line{flex:1;border-bottom:2.5px solid #000;height:34px}
+    #printFoot .pf-short{flex:0 0 58mm}
+    .wrap{padding-bottom:21mm}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brandbar">
+    <div class="wordmark">
+      <span class="co">Alexander Machine Shop</span>
+      <span class="tool">Turret Layout Planner</span>
+    </div>
+    <span class="radbadge"><span class="r">RAD</span><span class="m">MFG</span></span>
+    <span class="spacer"></span>
+    <span class="ttl">Minimum index travel between tool changes</span>
+    <button id="themeBtn" class="noprint" title="Switch light / dark">&#9681; Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+<!-- ============ COL 1: machine ============ -->
+<div class="col noprint">
+
+  <div class="card">
+    <h2>Turret</h2>
+    <div class="row">
+      <div style="flex:2">
+        <label for="turretSel">Profile</label>
+        <select id="turretSel"></select>
+      </div>
+      <div style="flex:0 0 auto"><button id="addTurret" title="New turret profile">+</button></div>
+      <div style="flex:0 0 auto"><button id="delTurret" title="Delete profile">&minus;</button></div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="turretName">Name</label>
+        <input type="text" id="turretName">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="stations">Stations</label>
+        <select id="stations"></select>
+      </div>
+      <div>
+        <label for="secPer">Sec / stn</label>
+        <input type="number" id="secPer" value="0.35" step="0.05" min="0">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="model">Indexing</label>
+        <select id="model">
+          <option value="bi">Bi-directional</option>
+          <option value="uni">Uni-directional</option>
+        </select>
+      </div>
+    </div>
+    <label style="display:flex;gap:7px;align-items:center;margin-top:2px">
+      <input type="checkbox" id="loopCycle" checked style="width:auto">
+      <span>Count return from last tool to first (part-to-part)</span>
+    </label>
+    <div style="margin-top:12px">
+      <label>Blocked / unusable stations <span class="mono" style="color:var(--text-muted)">(click to toggle)</span></label>
+      <div class="swatchrow" id="blockedGrid"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Adjust</h2>
+    <div class="btnrow">
+      <button id="optimize" class="primary">Re-solve</button>
+      <button id="rotCW" title="Rotate clockwise">&#8635;</button>
+      <button id="rotCCW" title="Rotate counter-clockwise">&#8634;</button>
+      <button id="mirror">Mirror</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>File</h2>
+    <div class="btnrow">
+      <button id="exportJson">Save</button>
+      <button id="importBtn">Load</button>
+      <button id="copySheet">Copy sheet</button>
+      <button id="printBtn">Print</button>
+      <button id="loadDemo">Example</button>
+    </div>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+  </div>
+</div>
+
+<!-- ============ COL 2: tools ============ -->
+<div class="col noprint">
+  <div class="card grow">
+    <h2>Tools</h2>
+    <div class="row">
+      <div><label for="newTool">Add tool</label><input type="text" id="newTool" placeholder="e.g. OD ROUGH 80&deg;"></div>
+      <div style="flex:0 0 auto"><button id="addTool" class="primary">Add</button></div>
+      <div style="flex:0 0 auto"><button id="pruneTools" title="Delete tools that aren't in the sequence">Prune</button></div>
+    </div>
+    <div class="scroll">
+      <table id="toolTable">
+        <thead><tr><th style="width:22%">Tool</th><th style="width:32%">Insert</th><th style="width:19%">Ins. loc</th><th style="width:10.5%">Pin</th><th style="width:10.5%">Now</th><th style="width:6%"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="note"><b>Pin</b> = lock to a station. <b>Now</b> = where it sits today.</div>
+  </div>
+</div>
+
+<!-- ============ COL 3: rules + sequence ============ -->
+<div class="col noprint">
+  <div class="card">
+    <h2>Clearance rules</h2>
+    <div id="ruleList"></div>
+    <div class="row" style="margin-top:10px;margin-bottom:0">
+      <div style="flex:0 0 auto"><button id="addRule" class="primary">+ Add rule</button></div>
+      <div style="flex:1"></div>
+    </div>
+    <div class="note">Hard constraints &mdash; gaps are measured the short way round.</div>
+  </div>
+
+  <div class="card grow">
+    <h2>Machining sequence</h2>
+    <div class="chips" id="seqChips"></div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label for="seqAdd">Append tool</label>
+        <select id="seqAdd"></select>
+      </div>
+      <div style="flex:0 0 auto"><button id="clearSeq">Clear</button></div>
+    </div>
+    <details>
+      <summary>Paste a tool sequence / program tool list</summary>
+      <textarea id="pasteBox" rows="7" placeholder="One tool call per line, or comma separated. Understands:
+T0101
+T2  (M6)
+OD ROUGH
+DRILL 10.5
+BAR .750
+Comment lines starting with ( ; % / N are ignored."></textarea>
+      <div class="btnrow" style="margin-top:8px">
+        <button id="parseBtn" class="primary">Parse &rarr; sequence</button>
+        <button id="parseAppend">Append</button>
+      </div>
+    </details>
+    <div class="note">Drag chips to reorder &mdash; re-solves on drop. Alt+arrows nudges.</div>
+  </div>
+</div>
+
+<!-- ============ COL 4: result ============ -->
+<div class="col">
+  <div id="printHead" class="printonly"></div>
+
+  <div class="card print-hide">
+    <h2>Layout goal <span style="text-transform:none;letter-spacing:0;font-weight:400">&mdash; click to switch</span></h2>
+    <div class="modebar" id="modeBar"></div>
+    <div class="stats" id="statsBox"></div>
+    <div id="errBox" class="err"></div>
+  </div>
+
+  <div class="layout-grid">
+    <div class="card mapcard">
+      <h2 id="diagTitle">Turret map</h2>
+      <svg id="diagram" viewBox="0 0 800 620" role="img" aria-label="Turret station map"></svg>
+      <div class="legend print-hide">
+        <span><i style="background:var(--accent)"></i>Loaded station</span>
+        <span><i style="background:var(--surface-1);border:1px solid var(--line-strong)"></i>Empty</span>
+        <span><i style="background:var(--accent);box-shadow:inset 0 0 0 2px var(--pin-ring)"></i>Pinned</span>
+        <span><i style="background:var(--blocked)"></i>Blocked</span>
+        <span><i style="background:var(--path)"></i>Index path (thicker = more often)</span>
+        <span><i style="background:var(--rule-met)"></i>Clearance rule (dashed)</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="card screen-hide">
+        <h2>Station list</h2>
+        <div class="listwrap"><div class="scroll"><table id="layoutTable">
+          <thead><tr><th style="width:26px" title="Tick off as you change tools over">&#10003;</th><th style="width:46px">Stn</th><th>Tool</th><th style="width:86px">Insert</th><th style="width:74px">Insert location</th><th style="width:34px">Use</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="scroll half2"><table id="layoutTable2">
+          <thead><tr><th style="width:26px">&#10003;</th><th style="width:46px">Stn</th><th>Tool</th><th style="width:86px">Insert</th><th style="width:74px">Insert location</th><th style="width:34px">Use</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        </div>
+      </div>
+      <div class="card print-hide screen-hide">
+        <h2>Index moves</h2>
+        <div class="scroll"><table id="moveTable">
+          <thead><tr><th>#</th><th>From</th><th>To</th><th style="width:44px">Idx</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+</div>
+  <div id="printFoot" class="printonly">
+    <div class="pf-row">
+      <span class="pf-lab">SET BY</span><span class="pf-line"></span>
+      <span class="pf-lab pf-date">DATE</span><span class="pf-line pf-short"></span>
+    </div>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+"use strict";
+/* ---------------------------------------------------------------- state */
+const S = {
+  turrets: [
+    {id:1, name:"Turret A", stations:12, model:"bi", secPer:0.35, loop:true, blocked:[]},
+    {id:2, name:"Turret B", stations:20, model:"bi", secPer:0.35, loop:true, blocked:[]}
+  ],
+  active: 0,
+  tools: [],       // {id,name,pin(1-based|null),cur(1-based|null)}
+  seq: [],         // tool ids
+  layout: {},      // toolId -> 0-based station
+  nextTool: 1,
+  nextTurret: 3,
+  rules: [],       // clearance rules
+  done: {},        // station -> ticked off during changeover
+  mode: "opt",     // "opt" | "seq" | "cur"  — which layout goal is showing
+  opt: null        // cached optimizer result {layout,cost,leftOff}
+};
+const T = () => S.turrets[S.active];
+const $ = id => document.getElementById(id);
+
+/* ---------------------------------------------------------------- math */
+function dist(a,b,P,model){ const d=((b-a)%P+P)%P; return model==="uni" ? d : Math.min(d,P-d); }
+
+// collapse consecutive duplicates, drop tools that no longer exist
+function cleanSeq(){
+  const ids = new Set(S.tools.map(t=>t.id));
+  const out=[];
+  for(const id of S.seq){ if(!ids.has(id)) continue; if(out.length && out[out.length-1]===id) continue; out.push(id); }
+  return out;
+}
+// directed transitions with counts
+function transitions(){
+  const s = cleanSeq(); const t = T(); const m = new Map();
+  const push=(a,b)=>{ if(a===b) return; const k=a+"|"+b; m.set(k,(m.get(k)||0)+1); };
+  for(let i=0;i<s.length-1;i++) push(s[i],s[i+1]);
+  if(t.loop && s.length>1) push(s[s.length-1],s[0]);
+  return [...m.entries()].map(([k,c])=>{ const [a,b]=k.split("|").map(Number); return {a,b,c}; });
+}
+function costOf(layout){
+  const t=T(); let c=0;
+  for(const tr of transitions()){
+    const pa=layout[tr.a], pb=layout[tr.b];
+    if(pa===undefined||pb===undefined) continue;
+    c += tr.c * dist(pa,pb,t.stations,t.model);
+  }
+  return c;
+}
+
+/* ------------------------------------------------------------ optimizer */
+// tools that must go on the turret (sequence order first), plus spares if there is room
+function toolsToPlace(freeCount){
+  const seqIds = [...new Set(cleanSeq())];              // unique, in first-use order
+  const inSeq = seqIds.map(id=>toolById(id)).filter(Boolean);
+  const rest = S.tools.filter(t=>!seqIds.includes(t.id));
+  const pinnedRest = rest.filter(t=>t.pin);
+  const spare = rest.filter(t=>!t.pin);
+  const must = inSeq.concat(pinnedRest);
+  const room = Math.max(0, freeCount - must.length);
+  return {must, placed: must.concat(spare.slice(0,room)), leftOff: spare.slice(room)};
+}
+
+/* ------------------------------------------------------ clearance rules */
+const REL = {
+  opp:   {label:"opposite",         needsB:true,  needsN:false},
+  min:   {label:"at least … from",  needsB:true,  needsN:true},
+  max:   {label:"within … of",      needsB:true,  needsN:true},
+  clear: {label:"… clear each side",needsB:false, needsN:true}
+};
+function circ(a,b,P){ const d=((b-a)%P+P)%P; return Math.min(d,P-d); }   // physical gap, ignores index direction
+
+// how badly a rule is broken by a layout (0 = satisfied). `get` maps toolId -> station index.
+function ruleBreak(rule, get, P, allIds){
+  const pa=get(rule.a);
+  if(pa===undefined||pa===null) return 0;                 // tool not on the turret — nothing to judge
+  if(rule.type==="clear"){
+    let v=0;
+    for(const id of allIds){
+      if(id===rule.a) continue;
+      const pb=get(id); if(pb===undefined||pb===null) continue;
+      const d=circ(pa,pb,P); if(d<=rule.n) v += rule.n-d+1;
+    }
+    return v;
+  }
+  const pb=get(rule.b);
+  if(pb===undefined||pb===null) return 0;
+  const d=circ(pa,pb,P);
+  if(rule.type==="opp")  return Math.max(0, (Math.floor(P/2)-(rule.tol||0)) - d);
+  if(rule.type==="min")  return Math.max(0, rule.n - d);
+  if(rule.type==="max")  return Math.max(0, d - rule.n);
+  return 0;
+}
+function activeRules(){
+  const ids=new Set(S.tools.map(t=>t.id));
+  return (S.rules||[]).filter(r=>{
+    if(!ids.has(r.a)) return false;
+    if(REL[r.type].needsB && (!r.b || !ids.has(r.b) || r.b===r.a)) return false;
+    return true;
+  });
+}
+// per-rule report against a finished layout
+function ruleReport(layout){
+  const P=T().stations, ids=Object.keys(layout||{}).map(Number);
+  const get=id=>layout?layout[id]:undefined;
+  return activeRules().map(r=>{
+    const brk=ruleBreak(r,get,P,ids);
+    const pa=get(r.a), pb=r.b!==null&&r.b!==undefined?get(r.b):undefined;
+    return {rule:r, broken:brk>0, by:brk,
+            gap:(pa!==undefined&&pb!==undefined)?circ(pa,pb,P):null,
+            placed:pa!==undefined};
+  });
+}
+function ruleText(r){
+  const A=toolById(r.a), B=toolById(r.b);
+  const an=A?A.name:"?", bn=B?B.name:"?";
+  if(r.type==="opp")   return `${an} opposite ${bn}`;
+  if(r.type==="min")   return `${an} at least ${r.n} from ${bn}`;
+  if(r.type==="max")   return `${an} within ${r.n} of ${bn}`;
+  if(r.type==="clear") return `${an} keeps ${r.n} station${r.n>1?"s":""} clear either side`;
+  return "rule";
+}
+// reasons a rule can never be met on this turret, whatever the layout
+function ruleImpossible(r){
+  const t=T(), P=t.stations, usable=P-t.blocked.length, half=Math.floor(P/2);
+  if(r.type==="opp"){
+    const need=half-(r.tol||0);
+    if(need>half) return `needs more than ${half} stations of separation, the most a ${P}-station turret has`;
+    // is any usable pair that far apart?
+    for(let i=0;i<P;i++){ if(t.blocked.includes(i+1)) continue;
+      for(let j=0;j<P;j++){ if(t.blocked.includes(j+1)) continue; if(circ(i,j,P)>=need) return null; } }
+    return "no two usable stations are that far apart; unblock one";
+  }
+  if(r.type==="min" && r.n>half) return `${r.n} stations apart is more than the ${half} a ${P}-station turret allows`;
+  if(r.type==="clear" && (r.n*2+1)>usable) return `${r.n} clear either side needs ${r.n*2+1} stations, only ${usable} usable`;
+  return null;
+}
+
+function optimize(){
+  const t=T(), P=t.stations;
+  const blocked = new Set(t.blocked);
+  const free = []; for(let i=0;i<P;i++) if(!blocked.has(i+1)) free.push(i);
+  const sel = toolsToPlace(free.length);
+  const used = sel.placed;
+  if(sel.must.length>free.length) return {err:`${sel.must.length} tools in the sequence won't fit in ${free.length} usable stations.`};
+
+  // pins
+  const fixed = {}; const takenSet = new Set();
+  for(const tl of used){
+    if(tl.pin){
+      const p = tl.pin-1;
+      if(blocked.has(tl.pin)) return {err:`${tl.name} is pinned to blocked station ${tl.pin}.`};
+      if(takenSet.has(p)) return {err:`Two tools are pinned to station ${tl.pin}.`};
+      takenSet.add(p); fixed[tl.id]=p;
+    }
+  }
+  const movable = used.filter(x=>!x.pin);
+  const openSlots = free.filter(p=>!takenSet.has(p));
+
+  // index maps
+  const idx = new Map(used.map((tl,i)=>[tl.id,i]));
+  const trs = transitions().filter(tr=>idx.has(tr.a)&&idx.has(tr.b));
+  const inc = used.map(()=>[]);            // tool -> transition indices
+  trs.forEach((tr,i)=>{ inc[idx.get(tr.a)].push(i); inc[idx.get(tr.b)].push(i); });
+
+  const nT = used.length;
+  const pos = new Int32Array(nT);
+  const movIdx = movable.map(m=>idx.get(m.id));
+
+  // ---- clearance rules -------------------------------------------------
+  const rules = activeRules().filter(r=>idx.has(r.a) && (!REL[r.type].needsB || idx.has(r.b)));
+  for(const r of rules){ const why=ruleImpossible(r); if(why) return {err:`Can't satisfy "${ruleText(r)}" — ${why}.`, ruleFail:[r]}; }
+  const allIds = used.map(u=>u.id);
+  const getPos = id => { const i=idx.get(id); return i===undefined?undefined:pos[i]; };
+  // which rules can a move of tool i change? pair rules touch their two tools;
+  // a clear rule can be broken by ANY tool moving next to its owner.
+  const ruleInc = used.map(()=>[]);
+  rules.forEach((r,ri)=>{
+    if(r.type==="clear") ruleInc.forEach(list=>list.push(ri));
+    else { ruleInc[idx.get(r.a)].push(ri); ruleInc[idx.get(r.b)].push(ri); }
+  });
+  const BIG = 1000;                              // hard-constraint weight
+  const occ = new Int32Array(P).fill(-1);        // station -> tool slot, keeps "clear" rules O(n) not O(tools)
+  function clearBreak(r){
+    const pa=getPos(r.a); if(pa===undefined) return 0;
+    let v=0;
+    for(let k=-r.n;k<=r.n;k++){
+      if(k===0) continue;
+      const st=((pa+k)%P+P)%P, ti=occ[st];
+      if(ti>=0 && used[ti].id!==r.a) v += r.n-Math.abs(k)+1;
+    }
+    return v;
+  }
+  function breakOne(ri){ const r=rules[ri]; return r.type==="clear"? clearBreak(r) : ruleBreak(r, getPos, P, allIds); }
+  function breakSum(list){ let v=0; for(const ri of list) v += breakOne(ri); return v; }
+  const allRuleIdx = rules.map((_,i)=>i);
+
+  function full(){
+    let c=0; for(const tr of trs) c += tr.c*dist(pos[idx.get(tr.a)],pos[idx.get(tr.b)],P,t.model);
+    return c + BIG*breakSum(allRuleIdx);
+  }
+  function partial(set, rset){
+    let c=0; for(const i of set){ const tr=trs[i]; c += tr.c*dist(pos[idx.get(tr.a)],pos[idx.get(tr.b)],P,t.model);}
+    return c + BIG*breakSum(rset);
+  }
+  function travelOnly(){ let c=0; for(const tr of trs) c += tr.c*dist(pos[idx.get(tr.a)],pos[idx.get(tr.b)],P,t.model); return c; }
+
+  let best=null, bestCost=Infinity, bestBreak=Infinity, stale=0;
+  const restarts = rules.length? 30 : 14, iters = Math.max(9000, nT*P*180);
+
+  for(let r=0;r<restarts;r++){
+    // seed: r=0 -> sequential first-use order; others random
+    const slots = openSlots.slice();
+    for(const tl of used) if(tl.pin) pos[idx.get(tl.id)] = fixed[tl.id];
+    if(r===0){
+      // first-use order, de-duplicated — one station each, never wrapping
+      const order = [...new Set(cleanSeq())].filter(id=>idx.has(id) && !S.tools.find(x=>x.id===id).pin);
+      for(const tl of movable) if(!order.includes(tl.id)) order.push(tl.id);
+      order.forEach((id,i)=>{ if(i<slots.length) pos[idx.get(id)] = slots[i]; });
+    } else {
+      for(let i=slots.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [slots[i],slots[j]]=[slots[j],slots[i]]; }
+      movIdx.forEach((ti,i)=>{ pos[ti]=slots[i]; });
+    }
+    const occupied = new Set(); for(let i=0;i<nT;i++) occupied.add(pos[i]);
+    let empties = free.filter(p=>!occupied.has(p));
+    occ.fill(-1); for(let i=0;i<nT;i++) occ[pos[i]]=i;
+
+    let cur = full();
+    let T0 = Math.max(2, cur/Math.max(1,nT)) , Tend = 0.02;
+    for(let k=0;k<iters;k++){
+      const temp = T0*Math.pow(Tend/T0, k/iters);
+      let a, b, mode;
+      if(movIdx.length===0) break;
+      if(empties.length && Math.random()<0.35){
+        mode=1; a = movIdx[(Math.random()*movIdx.length)|0];
+        b = (Math.random()*empties.length)|0;
+      } else {
+        if(movIdx.length<2) continue;
+        mode=0; a = movIdx[(Math.random()*movIdx.length)|0];
+        do{ b = movIdx[(Math.random()*movIdx.length)|0]; } while(b===a);
+      }
+      const set = new Set(inc[a]); if(mode===0) for(const i of inc[b]) set.add(i);
+      const rset = new Set(ruleInc[a]); if(mode===0) for(const i of ruleInc[b]) rset.add(i);
+      const before = partial(set, rset);
+      let sa=pos[a], sb;
+      if(mode===1){ sb=empties[b]; pos[a]=sb; occ[sa]=-1; occ[sb]=a; }
+      else { sb=pos[b]; pos[a]=sb; pos[b]=sa; occ[sb]=a; occ[sa]=b; }
+      const after = partial(set, rset);
+      const d = after-before;
+      if(d<=0 || Math.random()<Math.exp(-d/temp)){
+        if(mode===1) empties[b]=sa;
+        cur += d;
+      } else {
+        if(mode===1){ pos[a]=sa; occ[sb]=-1; occ[sa]=a; }
+        else { pos[a]=sa; pos[b]=sb; occ[sa]=a; occ[sb]=b; }
+      }
+    }
+    const brk = breakSum(allRuleIdx), trav = travelOnly();
+    if(brk<bestBreak || (brk===bestBreak && trav<bestCost-1e-9)){ bestBreak=brk; bestCost=trav; best=Array.from(pos); stale=0; }
+    else stale++;
+    // once we have a legal layout, stop as soon as extra restarts stop paying
+    if(bestBreak===0 && r>=9 && stale>=5) break;
+  }
+  const layout={}; used.forEach((tl,i)=>{ layout[tl.id]=best[i]; });
+  if(bestBreak>0){
+    const get=id=>layout[id];
+    const bad=rules.filter(r=>ruleBreak(r,get,P,allIds)>0);
+    return {err:"No layout satisfies "+(bad.length>1?"these rules":"this rule")+": "+bad.map(ruleText).join("; ")+".",
+            ruleFail:bad, nearMiss:layout};
+  }
+  return {layout, cost:bestCost, leftOff:sel.leftOff};
+}
+
+/* ------------------------------------------------------- other layouts */
+function sequentialLayout(){
+  const t=T(), blocked=new Set(t.blocked);
+  const free=[]; for(let i=0;i<t.stations;i++) if(!blocked.has(i+1)) free.push(i);
+  const layout={}; const taken=new Set();
+  for(const tl of S.tools) if(tl.pin && !blocked.has(tl.pin)){ layout[tl.id]=tl.pin-1; taken.add(tl.pin-1); }
+  const slots = free.filter(p=>!taken.has(p));
+  const order=[...cleanSeq()];
+  for(const tl of S.tools) if(!order.includes(tl.id)) order.push(tl.id);
+  let i=0;
+  for(const id of order){ if(layout[id]!==undefined) continue; if(i>=slots.length) break; layout[id]=slots[i++]; }
+  return layout;
+}
+function currentLayout(){
+  const t=T(); const layout={};
+  for(const tl of S.tools) if(tl.cur && tl.cur>=1 && tl.cur<=t.stations) layout[tl.id]=tl.cur-1;
+  return Object.keys(layout).length? layout : null;
+}
+
+/* --------------------------------------------------------- layout modes */
+const MODES = {
+  opt: {label:"Optimized",  hint:"least index travel"},
+  seq: {label:"In program order", hint:"tools loaded 1,2,3…"},
+  cur: {label:"Your setup", hint:'from the "Now" column'}
+};
+// a layout only counts if every tool in the sequence has its own usable station
+function layoutOk(l){
+  if(!l) return false;
+  const blocked=new Set(T().blocked), seen=new Set();
+  for(const id of new Set(cleanSeq())) if(l[id]===undefined) return false;
+  for(const p of Object.values(l)){ if(seen.has(p)||blocked.has(p+1)) return false; seen.add(p); }
+  return true;
+}
+function layoutFor(mode){
+  let l;
+  if(mode==="seq") l = sequentialLayout();
+  else if(mode==="cur") l = currentLayout();
+  else { if(!S.opt) S.opt = optimize(); l = S.opt.err ? null : S.opt.layout; }
+  return layoutOk(l) ? l : null;
+}
+function whyNot(mode){
+  const t=T(), usable=t.stations-t.blocked.length, need=new Set(cleanSeq()).size;
+  if(need>usable) return `${need} tools won't fit in ${usable} usable stations`;
+  if(mode==="cur"){
+    const missing=[...new Set(cleanSeq())].filter(id=>!toolById(id)||!toolById(id).cur).length;
+    if(missing) return `${missing} tool${missing>1?"s":""} still need a "Now" station`;
+    return 'Two tools share the same "Now" station';
+  }
+  if(mode==="opt" && S.opt && S.opt.err) return S.opt.err;
+  return "Doesn't fit on this turret";
+}
+function applyMode(mode, quiet){
+  const l = layoutFor(mode);
+  if(!l){
+    err(whyNot(mode));
+    if(mode!==S.mode) return false;
+    S.layout={}; renderAll(); return false;
+  }
+  const changed = JSON.stringify(l)!==JSON.stringify(S.layout);
+  S.mode=mode; S.layout=l; if(changed) S.done={}; err("");
+  renderAll();
+  if(mode==="opt" && S.opt.leftOff && S.opt.leftOff.length)
+    err("No room on the turret for: "+S.opt.leftOff.map(t=>t.name).join(", "));
+  return true;
+}
+// re-solve after anything structural changes
+let solveTimer=null;
+function invalidate(){
+  S.opt=null;
+  clearTimeout(solveTimer);
+  solveTimer=setTimeout(()=>{ applyMode(S.mode, true); }, 60);
+}
+
+/* ------------------------------------------------------------- render */
+function toolById(id){ return S.tools.find(t=>t.id===id); }
+function stnLabel(p){ return "T"+String(p+1).padStart(2,"0"); }
+
+function renderAll(){ renderTurret(); renderTools(); renderRules(); renderSeq(); renderModeBar(); renderStats(); renderDiagram(); renderTables(); renderPrintHead(); document.body.classList.toggle('stn-few', T().stations<=17);
+  document.body.classList.toggle('stn-many', T().stations>17); }
+
+function renderModeBar(){
+  const bar=$("modeBar"); bar.innerHTML="";
+  const costs={};
+  for(const m of ["opt","seq","cur"]){ const l=layoutFor(m); costs[m]= l? costOf(l) : null; }
+  const breaks={};
+  for(const m of ["opt","seq","cur"]){
+    const l=layoutFor(m);
+    breaks[m]= l? ruleReport(l).filter(x=>x.broken) : [];
+  }
+  const legal=["opt","seq","cur"].filter(m=>costs[m]!==null && !breaks[m].length).map(m=>costs[m]);
+  const bestVal=legal.length?Math.min(...legal):null;
+  for(const m of ["opt","seq","cur"]){
+    const d=MODES[m], c=costs[m], br=breaks[m];
+    const el=document.createElement("div");
+    el.className="modebtn"+(S.mode===m?" active":"")+(c===null?" disabled":"");
+    el.innerHTML=`${c!==null&&!br.length&&c===bestVal&&legal.length>1?'<span class="best">BEST</span>':""}
+      <div class="mk"><span class="dot"></span>${d.label}</div>
+      <div class="mv">${c===null?"—":c}<span class="mu"> steps</span></div>
+      <div class="mu">${d.hint}</div>
+      ${br.length?`<span class="flag">✕ breaks ${br.length} rule${br.length>1?"s":""}</span>`:""}`;
+    el.onclick=()=>applyMode(m);
+    el.title = c===null ? whyNot(m) : `${d.label}: ${c} index steps`;
+    if(c===null){ el.lastElementChild.textContent = whyNot(m); el.lastElementChild.style.color="var(--warn)"; }
+    bar.appendChild(el);
+  }
+}
+
+function renderTurret(){
+  const sel=$("turretSel"); sel.innerHTML="";
+  S.turrets.forEach((t,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=`${t.name} — ${t.stations} stn`; sel.appendChild(o); });
+  sel.value=S.active;
+  const t=T();
+  $("turretName").value=t.name;
+  const st=$("stations");
+  if(st.options.length===0){ for(let n=8;n<=32;n++){ const o=document.createElement("option"); o.value=n;o.textContent=n; st.appendChild(o);} }
+  st.value=t.stations; $("model").value=t.model; $("secPer").value=t.secPer; $("loopCycle").checked=t.loop;
+  const g=$("blockedGrid"); g.innerHTML="";
+  for(let i=1;i<=t.stations;i++){
+    const b=document.createElement("div");
+    b.className="sw"+(t.blocked.includes(i)?" blocked":"");
+    b.textContent=i; b.title="Station "+i;
+    b.onclick=()=>{ const k=t.blocked.indexOf(i); if(k<0) t.blocked.push(i); else t.blocked.splice(k,1); invalidate(); renderAll(); };
+    g.appendChild(b);
+  }
+}
+
+function renderTools(){
+  const tb=$("toolTable").querySelector("tbody"); tb.innerHTML="";
+  const t=T();
+  const opts = n => { let s='<option value="">—</option>'; for(let i=1;i<=n;i++) s+=`<option value="${i}">${i}</option>`; return s; };
+  S.tools.forEach(tl=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td><input type="text" value="${esc(tl.name)}" data-k="name"></td>
+      <td><input type="text" value="${esc(tl.ins||"")}" data-k="ins" placeholder="CNMG 432" title="Cutting insert"></td>
+      <td><input type="text" value="${esc(tl.loc||"")}" data-k="loc" placeholder="BIN 12" title="Where the insert lives"></td>
+      <td><select data-k="pin">${opts(t.stations)}</select></td>
+      <td><select data-k="cur">${opts(t.stations)}</select></td>
+      <td><button class="mini" data-k="del" title="Remove">&times;</button></td>`;
+    tr.querySelector('[data-k="pin"]').value = tl.pin||"";
+    tr.querySelector('[data-k="cur"]').value = tl.cur||"";
+    tr.querySelector('[data-k="name"]').oninput = e=>{ tl.name=e.target.value; renderSeq(); renderDiagram(); renderTables(); };
+    tr.querySelector('[data-k="ins"]').oninput = e=>{ tl.ins=e.target.value; renderTables(); };
+    tr.querySelector('[data-k="loc"]').oninput = e=>{ tl.loc=e.target.value; renderTables(); };
+    tr.querySelector('[data-k="pin"]').onchange = e=>{ tl.pin = e.target.value?+e.target.value:null; invalidate(); renderAll(); };
+    tr.querySelector('[data-k="cur"]').onchange = e=>{ tl.cur = e.target.value?+e.target.value:null; if(S.mode==="cur"){applyMode("cur",true);} else {renderModeBar(); renderStats();} };
+    tr.querySelector('[data-k="del"]').onclick = ()=>{ S.tools=S.tools.filter(x=>x!==tl); S.seq=S.seq.filter(x=>x!==tl.id); delete S.layout[tl.id]; invalidate(); renderAll(); };
+    tb.appendChild(tr);
+  });
+  const sa=$("seqAdd"); sa.innerHTML='<option value="">— pick a tool —</option>';
+  S.tools.forEach(tl=>{ const o=document.createElement("option"); o.value=tl.id;o.textContent=tl.name; sa.appendChild(o); });
+}
+
+function renderSeq(){
+  const box=$("seqChips"); box.innerHTML="";
+  const s=cleanSeq();
+  if(!s.length){ box.innerHTML='<span style="color:var(--text-muted);font-size:12px;padding:3px">No sequence yet — add tools or paste a tool list.</span>'; return; }
+  s.forEach((id,i)=>{
+    const tl=toolById(id); if(!tl) return;
+    const c=document.createElement("span"); c.className="chip"; c.dataset.id=id; c.tabIndex=0;
+    c.title="Drag to reorder · Alt+← / Alt+→ to nudge";
+    c.innerHTML=`<span class="grip" aria-hidden="true">⠿</span><span class="n">${i+1}</span><span>${esc(tl.name)}</span>`;
+    const b=document.createElement("button"); b.textContent="×"; b.title="Remove from sequence";
+    b.onclick=()=>{ const full=cleanSeq(); full.splice(i,1); S.seq=full; invalidate(); renderAll(); };
+    c.appendChild(b); box.appendChild(c);
+  });
+}
+
+/* ------------------------------------------------- drag to reorder seq */
+function commitSeqFromDOM(){
+  const ids=[...$("seqChips").querySelectorAll(".chip")].map(c=>+c.dataset.id);
+  if(!ids.length) return;
+  S.seq=ids; invalidate(); renderAll();
+}
+function initSeqDrag(){
+  const box=$("seqChips");
+  let d=null;
+  box.addEventListener("pointerdown", e=>{
+    const chip=e.target.closest(".chip");
+    if(!chip || e.target.closest("button")) return;
+    if(e.pointerType==="mouse" && e.button!==0) return;
+    d={chip, x:e.clientX, y:e.clientY, moved:false, id:e.pointerId};
+    box.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  box.addEventListener("pointermove", e=>{
+    if(!d || e.pointerId!==d.id) return;
+    if(!d.moved){
+      if(Math.hypot(e.clientX-d.x, e.clientY-d.y)<4) return;
+      d.moved=true; d.chip.classList.add("dragging"); box.classList.add("dragging-in");
+    }
+    const others=[...box.querySelectorAll(".chip")].filter(c=>c!==d.chip);
+    if(!others.length) return;
+    // chips on the pointer's row, in visual order
+    const row=others.filter(c=>{ const r=c.getBoundingClientRect(); return e.clientY>=r.top-6 && e.clientY<=r.bottom+6; });
+    if(row.length){
+      const before=row.find(c=>{ const r=c.getBoundingClientRect(); return e.clientX < r.left + r.width/2; });
+      if(before) box.insertBefore(d.chip, before);
+      else box.insertBefore(d.chip, row[row.length-1].nextSibling);
+    } else {
+      // above every chip, or below them all
+      const first=others[0].getBoundingClientRect();
+      if(e.clientY < first.top) box.insertBefore(d.chip, others[0]);
+      else box.appendChild(d.chip);
+    }
+  });
+  const stop = e=>{
+    if(!d || (e.pointerId!==undefined && e.pointerId!==d.id)) return;
+    const moved=d.moved; d.chip.classList.remove("dragging"); box.classList.remove("dragging-in");
+    try{ box.releasePointerCapture(d.id); }catch(_){}
+    d=null;
+    if(moved) commitSeqFromDOM();
+  };
+  box.addEventListener("pointerup", stop);
+  box.addEventListener("pointercancel", stop);
+  // keyboard nudge
+  box.addEventListener("keydown", e=>{
+    const chip=e.target.closest(".chip"); if(!chip) return;
+    let dir=0;
+    if(e.key==="ArrowLeft"||e.key==="ArrowUp") dir=-1;
+    else if(e.key==="ArrowRight"||e.key==="ArrowDown") dir=1;
+    else return;
+    if(!e.altKey && !e.metaKey) return;
+    e.preventDefault();
+    const ids=[...box.querySelectorAll(".chip")].map(c=>+c.dataset.id);
+    const i=[...box.querySelectorAll(".chip")].indexOf(chip), j=i+dir;
+    if(j<0||j>=ids.length) return;
+    [ids[i],ids[j]]=[ids[j],ids[i]];
+    S.seq=ids; invalidate(); renderAll();
+    const again=box.querySelectorAll(".chip")[Math.min(j, box.querySelectorAll(".chip").length-1)];
+    if(again) again.focus();
+  });
+}
+
+function renderRules(){
+  const box=$("ruleList"); box.innerHTML="";
+  const t=T();
+  if(!S.rules.length){
+    box.innerHTML='<div style="color:var(--text-muted);font-size:12px">No rules yet — e.g. "DRILL opposite PART OFF" to keep a long drill away from a sub-spindle or tailstock.</div>';
+    return;
+  }
+  const rep = ruleReport(S.layout||{});
+  const toolOpts = sel => { let o='<option value="">— tool —</option>';
+    for(const tl of S.tools) o+=`<option value="${tl.id}"${tl.id===sel?" selected":""}>${esc(tl.name)}</option>`; return o; };
+  S.rules.forEach((r,i)=>{
+    const d=REL[r.type];
+    const row=document.createElement("div");
+    row.className="rule";
+    row.style.gridTemplateColumns = d.needsB
+      ? (d.needsN ? "1fr 1fr 42px 1fr auto" : "1fr 1fr 1fr auto")
+      : "1fr 1.2fr 52px auto";
+    let relOpts=""; for(const k in REL) relOpts+=`<option value="${k}"${k===r.type?" selected":""}>${REL[k].label}</option>`;
+    const numIn = `<input type="number" data-k="n" min="1" max="${Math.floor(t.stations/2)}" value="${r.n}" title="stations">`;
+    row.innerHTML =
+      `<select data-k="a" title="Tool">${toolOpts(r.a)}</select>`+
+      `<select data-k="type" title="Rule">${relOpts}</select>`+
+      (d.needsN ? numIn : "")+
+      (d.needsB ? `<select data-k="b" title="Other tool">${toolOpts(r.b)}</select>` : "")+
+      `<button class="mini" data-k="del" title="Remove rule">&times;</button>`;
+    row.querySelector('[data-k="a"]').onchange=e=>{ r.a=+e.target.value||null; invalidate(); renderAll(); };
+    const bsel=row.querySelector('[data-k="b"]'); if(bsel) bsel.onchange=e=>{ r.b=+e.target.value||null; invalidate(); renderAll(); };
+    row.querySelector('[data-k="type"]').onchange=e=>{ r.type=e.target.value; if(!r.n)r.n=1; invalidate(); renderAll(); };
+    row.querySelectorAll('[data-k="n"]').forEach(el=>{ el.onchange=e=>{ r.n=Math.max(1,+e.target.value||1); invalidate(); renderAll(); }; });
+    row.querySelector('[data-k="del"]').onclick=()=>{ S.rules.splice(i,1); invalidate(); renderAll(); };
+    box.appendChild(row);
+
+    // status line
+    const st=document.createElement("div");
+    const found=rep.find(x=>x.rule===r);
+    const incomplete = !r.a || (d.needsB && (!r.b || r.b===r.a));
+    const bad = incomplete? null : ruleImpossible(r);
+    const blamed = S.opt && S.opt.ruleFail && S.opt.ruleFail.includes(r);
+    if(incomplete){ st.className="rulestat idle"; st.textContent=d.needsB?"pick both tools":"pick a tool"; }
+    else if(bad){ st.className="rulestat bad"; st.textContent="✕ impossible — "+bad; }
+    else if(blamed){ st.className="rulestat bad"; st.textContent="✕ can't be met alongside the other rules and pins"; }
+    else if(!found || !found.placed){ st.className="rulestat idle"; st.textContent="no layout to check yet"; }
+    else if(found.broken){ st.className="rulestat bad"; st.textContent=`✕ broken by ${found.by} station${found.by>1?"s":""}`+(found.gap!==null?` (gap ${found.gap})`:""); }
+    else { st.className="rulestat ok"; st.textContent="✓ met"+(found.gap!==null?` — ${found.gap} stations apart`:""); }
+    box.appendChild(st);
+  });
+}
+
+function renderStats(){
+  const t=T(), box=$("statsBox");
+  const s=cleanSeq();
+  const nMoves = Math.max(0, s.length-1) + (t.loop && s.length>1 ? 1 : 0);
+  const shown = Object.keys(S.layout).length? costOf(S.layout) : null;
+  const optL = layoutFor("opt"), curL = currentLayout();
+  const optCost = optL? costOf(optL) : null;
+  const curCost = curL? costOf(curL) : null;
+  const base = curCost!==null ? curCost : costOf(sequentialLayout());
+  const baseName = curCost!==null ? "vs. now" : "vs. order";
+  const secs = v => (v*(+t.secPer||0));
+  const items=[];
+  items.push(stat("Steps", shown===null?"—":shown, "", shown!==null&&shown===optCost));
+  items.push(stat("Sec / part", shown===null?"—":secs(shown).toFixed(1),"s"));
+  items.push(stat("Changes", nMoves,""));
+  items.push(stat("Avg / chg", shown===null||!nMoves?"—":(shown/nMoves).toFixed(2),"stn"));
+  const save = shown===null? null : base-shown;
+  items.push(stat(baseName, save===null?"—":(save>0?"−":save<0?"+":"")+Math.abs(save),
+    save===null?"":"steps ("+secs(Math.abs(save)).toFixed(1)+"s)", save>0));
+  box.innerHTML=items.join("");
+}
+function stat(k,v,u,good){ return `<div class="stat${good?" good":""}"><div class="k">${k}</div><div class="v">${v}<span class="u"> ${u||""}</span></div></div>`; }
+
+function renderDiagram(){
+  const t=T(), P=t.stations, svg=$("diagram");
+  const CX=400, CY=310, R=205, rStn=Math.max(14, Math.min(28, 440/P*1.55));
+  const C=CX;
+  const blocked=new Set(t.blocked);
+  const at = {}; for(const [id,p] of Object.entries(S.layout)) at[p]=+id;
+  const pt = i => { const a=(-90 + i*360/P)*Math.PI/180; return [CX+R*Math.cos(a), CY+R*Math.sin(a)]; };
+
+  let g = `<circle cx="${CX}" cy="${CY}" r="${R}" style="fill:none;stroke:var(--line)" stroke-width="1.5"/>
+`;
+
+  // index paths
+  const trs = transitions().filter(tr=>S.layout[tr.a]!==undefined&&S.layout[tr.b]!==undefined);
+  const maxC = Math.max(1,...trs.map(x=>x.c));
+  for(const tr of trs){
+    const [x1,y1]=pt(S.layout[tr.a]), [x2,y2]=pt(S.layout[tr.b]);
+    const w = 1.2 + 3.6*(tr.c/maxC);
+    const d = dist(S.layout[tr.a],S.layout[tr.b],P,t.model);
+    const op = 0.16 + 0.5*(d/(P/2));
+    g += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" style="stroke:var(--path)" stroke-width="${w.toFixed(2)}" stroke-opacity="${Math.min(0.85,op).toFixed(2)}" stroke-linecap="round"/>`;
+  }
+
+  // clearance rules
+  for(const x of ruleReport(S.layout)){
+    const r=x.rule; if(!x.placed) continue;
+    const col = x.broken? "var(--bad)" : "var(--rule-met)";
+    if(r.type==="clear"){
+      // ring the stations this tool reserves
+      const pa=S.layout[r.a];
+      for(let k=-r.n;k<=r.n;k++){
+        if(k===0) continue;
+        const [nx,ny]=pt(((pa+k)%P+P)%P);
+        g += `<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="${(rStn+4).toFixed(1)}" style="fill:none;stroke:${col}" stroke-width="1.4" stroke-dasharray="4 4" stroke-opacity=".75"/>`;
+      }
+      continue;
+    }
+    const pa=S.layout[r.a], pb=S.layout[r.b];
+    if(pa===undefined||pb===undefined) continue;
+    const [x1,y1]=pt(pa), [x2,y2]=pt(pb);
+    g += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" style="stroke:${col}" stroke-width="1.6" stroke-dasharray="6 5" stroke-opacity=".8"/>`;
+    const mx=x1+(x2-x1)*0.3, my=y1+(y2-y1)*0.3;   // 30% along, so a diameter's badge misses the hub
+    g += `<circle cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="9" style="fill:var(--surface-1);stroke:${col}" stroke-width="1.4"/>
+          <text x="${mx.toFixed(1)}" y="${(my+3.5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${col}">${x.broken?"✕":"✓"}</text>`;
+  }
+
+  // stations
+  for(let i=0;i<P;i++){
+    const [x,y]=pt(i);
+    const id=at[i], tl=id!==undefined?toolById(id):null;
+    const isBlocked=blocked.has(i+1);
+    const fill = isBlocked ? "var(--blocked)" : tl ? "var(--accent)" : "var(--surface-1)";
+    const stroke = isBlocked ? "var(--line-strong)" : tl ? (tl.pin? "var(--pin-ring)" : "none") : "var(--line-strong)";
+    const sw = tl&&tl.pin ? 3 : 1.5;
+    const txt = isBlocked ? "#ffffff" : tl ? "var(--on-accent)" : "var(--text-muted)";
+    g += `<g class="stn${tl&&tl.pin?" pinned":""}" data-i="${i}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rStn}" style="fill:${fill};stroke:${stroke}" stroke-width="${sw}"/>
+      <text x="${x.toFixed(1)}" y="${(y+ (rStn>20?4.5:3.8)).toFixed(1)}" text-anchor="middle" style="fill:${txt}" font-size="${rStn>22?14:11}" font-weight="600" font-family="ui-monospace,monospace">${i+1}</text></g>`;
+    if(tl){
+      const a=(-90 + i*360/P)*Math.PI/180;
+      // push near-vertical labels further out, staggered, so they don't collide
+      const vert = 1-Math.abs(Math.cos(a));
+      const tiers = P>=24 ? 3 : 2;                       // more stations -> deeper stagger
+      const off = R+rStn+11 + (vert>0.45 ? (i%tiers)*15 + vert*10 : 0);
+      const lx=CX+off*Math.cos(a), ly=CY+off*Math.sin(a);
+      const anchor = Math.abs(Math.cos(a))<0.2 ? "middle" : (Math.cos(a)>0?"start":"end");
+      const nm = tl.name.length>15? tl.name.slice(0,14)+"…" : tl.name;
+      g += `<text x="${lx.toFixed(1)}" y="${(ly+3.5).toFixed(1)}" text-anchor="${anchor}" font-size="11.5" style="fill:var(--text-secondary)">${esc(nm)}</text>`;
+    }
+  }
+  // hub left clear — the centre stays empty
+
+  svg.innerHTML=g;
+  // shrink-wrap the viewBox to the drawing so the map isn't mostly whitespace
+  try{
+    const bb=svg.getBBox();
+    if(bb.width>10 && bb.height>10)
+      svg.setAttribute("viewBox", `${(bb.x-10).toFixed(1)} ${(bb.y-10).toFixed(1)} ${(bb.width+20).toFixed(1)} ${(bb.height+20).toFixed(1)}`);
+  }catch(_){}
+  $("diagTitle").textContent = `Turret map — ${t.model==="bi"?"bi-directional":"uni-directional"} indexing`;
+
+  svg.querySelectorAll(".stn").forEach(el=>{
+    el.style.cursor="default";
+    el.addEventListener("mousemove",e=>{
+      const i=+el.dataset.i, id=at[i], tl=id!==undefined?toolById(id):null;
+      showTip(e, `Station ${i+1}: ` + (blocked.has(i+1)?"blocked":(tl? tl.name + (tl.pin?" (pinned)":"") : "empty")));
+    });
+    el.addEventListener("mouseleave",hideTip);
+  });
+}
+
+function renderPrintHead(){
+  const t=T(), s=cleanSeq();
+  const rep=ruleReport(S.layout).filter(x=>!x.broken);
+  $("printHead").innerHTML =
+    `<div class="ph-top"><span class="ph-co">Alexander Machine Shop</span>
+       <span class="ph-rad">RAD MFG</span></div>
+     <div class="ph-title">Turret Setup Sheet &mdash; ${esc(t.name)}</div>
+     <div class="ph-meta">${t.stations} stations &middot; ${new Set(s).size} tools &middot; ${t.model==="bi"?"bi-directional":"uni-directional"} indexing${rep.length?" &middot; "+rep.length+" clearance rule"+(rep.length>1?"s":"")+" met":""}</div>
+`;
+}
+
+function renderTables(){
+  const t=T(), P=t.stations, blocked=new Set(t.blocked);
+  const at={}; for(const [id,p] of Object.entries(S.layout)) at[p]=+id;
+  const s=cleanSeq(); const useCount={};
+  s.forEach(id=>useCount[id]=(useCount[id]||0)+1);
+
+  const h=[];
+  for(let i=0;i<P;i++){
+    const id=at[i], tl=id!==undefined?toolById(id):null;
+    const nm = blocked.has(i+1)? '<span style="color:var(--text-muted)">— blocked —</span>' : tl? esc(tl.name)+(tl.pin?' <span class="tag pin">pin</span>':'') : '<span style="color:var(--text-muted)">—</span>';
+    const box = tl? `<input type="checkbox" class="tickbox" data-stn="${i}"${S.done[i]?" checked":""} title="Tick when this station is changed over">` : "";
+    h.push(`<tr><td class="chk">${box}</td><td class="mono"><b>${stnLabel(i)}</b></td><td>${nm}</td>`+
+         `<td class="ins">${tl&&tl.ins?esc(tl.ins):(tl?'<span class="rule"></span>':"")}</td>`+
+         `<td class="ins">${tl&&tl.loc?esc(tl.loc):(tl?'<span class="rule"></span>':"")}</td>`+
+         `<td class="mono">${tl&&useCount[id]?useCount[id]:""}</td></tr>`);
+  }
+  const rows=h;
+  const split = P>17 ? Math.ceil(P/2) : P;
+  const lt=$("layoutTable").querySelector("tbody");
+  const lt2=$("layoutTable2").querySelector("tbody");
+  lt.innerHTML = rows.slice(0, split).join("");
+  lt2.innerHTML = rows.slice(split).join("");
+  document.body.classList.toggle("split-list", split<P);
+  const bind = cb=>{
+    cb.onchange = e=>{ const k=+e.target.dataset.stn; if(e.target.checked) S.done[k]=true; else delete S.done[k]; };
+  };
+  lt.querySelectorAll(".tickbox").forEach(bind);
+  lt2.querySelectorAll(".tickbox").forEach(bind);
+
+  let m="", n=0, tot=0;
+  const steps=[...s]; if(t.loop && s.length>1) steps.push(s[0]);
+  for(let i=0;i<steps.length-1;i++){
+    const a=toolById(steps[i]), b=toolById(steps[i+1]);
+    const pa=S.layout[steps[i]], pb=S.layout[steps[i+1]];
+    if(pa===undefined||pb===undefined) continue;
+    const d=dist(pa,pb,P,t.model); tot+=d; n++;
+    const hot = d> P/4 ? ' style="color:var(--warn);font-weight:600"' : "";
+    const wrap = (i===steps.length-2 && t.loop && s.length>1) ? ' <span class="tag">cycle</span>':'';
+    m += `<tr><td class="mono">${n}</td><td>${esc(a.name)} <span class="mono" style="color:var(--text-muted)">${stnLabel(pa)}</span></td><td>${esc(b.name)} <span class="mono" style="color:var(--text-muted)">${stnLabel(pb)}</span>${wrap}</td><td class="mono"${hot}>${d}</td></tr>`;
+  }
+  m += `<tr><td></td><td colspan="2" style="text-align:right;font-weight:600">Total</td><td class="mono" style="font-weight:700">${tot}</td></tr>`;
+  $("moveTable").querySelector("tbody").innerHTML=m;
+}
+
+/* --------------------------------------------------------------- utils */
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const tip=$("tip");
+function showTip(e,txt){ tip.textContent=txt; tip.style.opacity=1; tip.style.left=(e.clientX+12)+"px"; tip.style.top=(e.clientY+14)+"px"; }
+function hideTip(){ tip.style.opacity=0; }
+function err(msg){ $("errBox").textContent = msg||""; }
+
+function findOrAddTool(name, code){
+  const n=String(name||"").trim(); if(!n && !code) return null;
+  let tl = code ? S.tools.find(t=>t.code===code)
+                : S.tools.find(t=>t.name.toLowerCase()===n.toLowerCase());
+  if(!tl){ tl={id:S.nextTool++, name:n||code, code:code||null, ins:"", loc:"", pin:null, cur:null}; S.tools.push(tl); }
+  else if(code && n && n.length>tl.name.length) tl.name=n;   // keep the richer description
+  return tl;
+}
+// returns [{label, code}] — same T-number is always the same tool
+function parseText(txt){
+  const out=[];
+  const lines = txt.split(/[\r\n,;]+/);
+  for(let raw of lines){
+    let line=raw.trim();
+    if(!line) continue;
+    if(/^[(%*]/.test(line)) continue;                     // comments
+    if(/^(UNO|WNO|MAT|OD|ID)\b.*:/i.test(line)) continue;  // header-ish
+    line = line.replace(/\(.*?\)/g,"").trim();             // strip inline comments
+    if(!line) continue;
+    if(/^N\d+\b/i.test(line)) line = line.replace(/^N\d+\s*/i,"").trim();
+    if(!line) continue;
+    // pure T code
+    let m = line.match(/^T\s*0*(\d{1,4})\b/i);
+    if(m){
+      let num=m[1];
+      if(num.length===4) num=num.slice(0,2);
+      else if(num.length===3) num=num.slice(0,1);
+      const code = "T"+String(+num).padStart(2,"0");
+      let rest = line.slice(m[0].length).replace(/^[\s\-:]+/,"").trim();
+      rest = rest.replace(/\bM0?6\b/ig,"").replace(/\b[MGSF]\d+\b/ig,"").trim();
+      out.push({code, label: rest? `${code} ${rest.toUpperCase()}` : code});
+      continue;
+    }
+    if(/^[MGSFXZ]\d/i.test(line)) continue;                // g-code motion line
+    out.push({code:null, label:line.toUpperCase()});
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------- actions */
+function runOptimize(){
+  err("");
+  if(S.tools.length===0){ err("Add some tools first."); return; }
+  S.opt=null; applyMode("opt");
+}
+
+$("addTool").onclick = ()=>{ const v=$("newTool").value; if(!v.trim())return; const tl=findOrAddTool(v); $("newTool").value=""; if(tl) S.seq.push(tl.id); invalidate(); renderAll(); };
+$("newTool").addEventListener("keydown",e=>{ if(e.key==="Enter") $("addTool").click(); });
+$("seqAdd").onchange = e=>{ if(e.target.value){ S.seq=cleanSeq(); S.seq.push(+e.target.value); e.target.value=""; invalidate(); renderAll(); } };
+$("clearSeq").onclick = ()=>{ S.seq=[]; invalidate(); renderAll(); };
+$("parseBtn").onclick = ()=>{ const items=parseText($("pasteBox").value); if(!items.length){err("Nothing recognised in that text.");return;}
+  S.seq=items.map(n=>findOrAddTool(n.label,n.code).id); err(""); runOptimize(); };
+$("pruneTools").onclick = ()=>{ const keep=new Set(cleanSeq()); S.tools=S.tools.filter(t=>keep.has(t.id));
+  S.seq=cleanSeq(); for(const id of Object.keys(S.layout)) if(!S.tools.find(t=>t.id===+id)) delete S.layout[id]; err(""); S.opt=null; applyMode(S.mode,true); };
+$("parseAppend").onclick = ()=>{ const items=parseText($("pasteBox").value); S.seq=cleanSeq().concat(items.map(n=>findOrAddTool(n.label,n.code).id)); renderAll(); };
+$("addRule").onclick = ()=>{
+  S.rules.push({type:"opp", a:null, b:null, n:1, tol:0});
+  invalidate(); renderAll();
+};
+$("optimize").onclick = runOptimize;
+
+function rotate(dir){ const P=T().stations, blocked=new Set(T().blocked);
+  for(let k=0;k<P;k++){
+    const nl={}; let ok=true;
+    for(const [id,p] of Object.entries(S.layout)){ const np=((+p+dir*(k+1))%P+P)%P; if(blocked.has(np+1)||toolById(+id).pin){ok=false;break;} nl[id]=np; }
+    if(ok){ S.layout=nl; renderAll(); return; }
+  }
+  err("Rotation blocked by pinned or blocked stations.");
+}
+$("rotCW").onclick=()=>rotate(1); $("rotCCW").onclick=()=>rotate(-1);
+$("mirror").onclick=()=>{ const P=T().stations, blocked=new Set(T().blocked); const nl={};
+  for(const [id,p] of Object.entries(S.layout)){ const np=((P-(+p))%P+P)%P; if(blocked.has(np+1)||toolById(+id).pin){ err("Mirror blocked by pinned or blocked stations."); return;} nl[id]=np; }
+  S.layout=nl; err(""); renderAll(); };
+
+$("turretSel").onchange = e=>{ S.active=+e.target.value; S.layout={}; S.opt=null; applyMode(S.mode,true); };
+$("turretName").oninput = e=>{ T().name=e.target.value; const s=$("turretSel"); s.options[S.active].textContent=`${e.target.value} — ${T().stations} stn`; renderDiagram(); };
+$("stations").onchange = e=>{ const t=T(); t.stations=+e.target.value; t.blocked=t.blocked.filter(b=>b<=t.stations);
+  S.tools.forEach(tl=>{ if(tl.pin>t.stations) tl.pin=null; if(tl.cur>t.stations) tl.cur=null; }); S.layout={}; S.opt=null; applyMode(S.mode,true); };
+$("model").onchange = e=>{ T().model=e.target.value; S.opt=null; applyMode(S.mode,true); };
+$("secPer").oninput = e=>{ T().secPer=+e.target.value; renderStats(); };
+$("loopCycle").onchange = e=>{ T().loop=e.target.checked; S.opt=null; applyMode(S.mode,true); };
+$("addTurret").onclick = ()=>{ S.turrets.push({id:S.nextTurret++,name:"Turret "+String.fromCharCode(64+S.turrets.length+1),stations:12,model:"bi",secPer:0.35,loop:true,blocked:[]}); S.active=S.turrets.length-1; S.layout={}; S.opt=null; applyMode(S.mode,true); };
+$("delTurret").onclick = ()=>{ if(S.turrets.length<2){err("Keep at least one turret profile.");return;} S.turrets.splice(S.active,1); S.active=0; S.layout={}; err(""); S.opt=null; applyMode(S.mode,true); };
+
+$("exportJson").onclick = ()=>{
+  const blob=new Blob([JSON.stringify({v:2,turrets:S.turrets,active:S.active,tools:S.tools,rules:S.rules,seq:cleanSeq(),layout:S.layout},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=(T().name||"turret").replace(/\W+/g,"_")+"_setup.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+$("importBtn").onclick = ()=>$("importFile").click();
+$("importFile").onchange = e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result);
+      S.turrets=d.turrets||S.turrets; S.active=d.active||0; S.tools=d.tools||[]; S.rules=d.rules||[]; S.done={}; S.seq=d.seq||[]; S.layout=d.layout||{}; S.opt=null;
+      S.nextTool=Math.max(1,...S.tools.map(t=>t.id))+1; S.nextTurret=Math.max(1,...S.turrets.map(t=>t.id))+1;
+      err(""); renderAll();
+    }catch(x){ err("Couldn't read that file."); } };
+  r.readAsText(f); e.target.value="";
+};
+$("copySheet").onclick = ()=>{
+  const t=T(), P=t.stations; const at={}; for(const [id,p] of Object.entries(S.layout)) at[p]=+id;
+  let s=`${t.name} — ${P} station turret\n${"".padEnd(40,"-")}\n`;
+  for(let i=0;i<P;i++){ const tl=at[i]!==undefined?toolById(at[i]):null;
+    const ins = tl&&tl.ins? `   [${tl.ins}]`:"";
+    const loc = tl&&tl.loc? `  @${tl.loc}`:"";
+    s+=`[ ] ${stnLabel(i)}  ${t.blocked.includes(i+1)?"[BLOCKED]":(tl?tl.name+ins+loc:"-")}\n`; }
+  s+=`${"".padEnd(40,"-")}\nTotal index steps: ${costOf(S.layout)}  (${(costOf(S.layout)*(+t.secPer||0)).toFixed(1)} s/part)\n`;
+  const rep=ruleReport(S.layout);
+  if(rep.length){ s+="\nClearance rules\n";
+    for(const x of rep) s+=`  ${x.broken?"BROKEN":"ok"}  ${ruleText(x.rule)}${x.gap!==null?`  (gap ${x.gap})`:""}\n`; }
+  const flash=m=>{ $("copySheet").textContent=m; setTimeout(()=>$("copySheet").textContent="Copy setup sheet",1400); };
+  const fallback=()=>{                       // file:// pages often block the async clipboard API
+    const ta=document.createElement("textarea");
+    ta.value=s; ta.style.cssText="position:fixed;top:-2000px;left:0";
+    document.body.appendChild(ta); ta.select();
+    let ok=false; try{ ok=document.execCommand("copy"); }catch(_){}
+    ta.remove();
+    ok ? flash("Copied!") : err("Couldn't reach the clipboard — use Save setup or Print instead.");
+  };
+  try{ navigator.clipboard.writeText(s).then(()=>flash("Copied!"), fallback); }catch(_){ fallback(); }
+};
+(function(){                       // host page can set the theme: ?theme=dark|light
+  const q=new URLSearchParams(location.search).get("theme");
+  if(q==="dark"||q==="light") document.documentElement.dataset.theme=q;
+  addEventListener("message",e=>{   // ...or postMessage({type:"theme",value:"dark"})
+    const d=e.data;
+    if(d && d.type==="theme" && (d.value==="dark"||d.value==="light"))
+      document.documentElement.dataset.theme=d.value;
+  });
+})();
+$("themeBtn").onclick = ()=>{
+  const r=document.documentElement;
+  const darkNow = r.dataset.theme ? r.dataset.theme==="dark"
+                : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = darkNow? "light":"dark";
+};
+$("printBtn").onclick = ()=>window.print();
+$("loadDemo").onclick = loadDemo;
+
+function loadDemo(){
+  S.turrets=[{id:1,name:"QT-200 turret",stations:12,model:"bi",secPer:0.35,loop:true,blocked:[]},
+             {id:2,name:"Integrex lower",stations:20,model:"bi",secPer:0.3,loop:true,blocked:[]}];
+  S.active=0; S.nextTurret=3; S.tools=[]; S.rules=[]; S.seq=[]; S.layout={}; S.done={}; S.nextTool=1; S.opt=null; S.mode="opt";
+  const order=["FACE 80°","OD ROUGH 80°","CENTER DRILL","DRILL 20.5","BAR ROUGH","OD FINISH 35°","BAR FINISH","GROOVE 3MM","OD THREAD","FACE 80°","OD FINISH 35°","PART OFF"];
+  S.seq = order.map(n=>findOrAddTool(n).id);
+  const po=S.tools.find(t=>t.name==="PART OFF"); if(po) po.pin=12;
+  const dr=S.tools.find(t=>t.name==="DRILL 20.5");
+  if(po&&dr) S.rules=[{type:"opp", a:dr.id, b:po.id, n:1, tol:0}];
+  runOptimize();
+}
+initSeqDrag();
+loadDemo();
+</script>
+</body>
+</html>
