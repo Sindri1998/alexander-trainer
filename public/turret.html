@@ -270,6 +270,7 @@
   @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .modal .sheet h2{color:var(--accent-ink)}}
   #tip{position:fixed;pointer-events:none;background:var(--brand-deep);color:#fff;padding:5px 8px;border-radius:5px;font-size:12px;opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap}
   .printonly{display:none}
+  #qrWrap{display:none}
   .screen-hide{display:none!important}
   @media print{
     @page{margin:12mm}
@@ -288,6 +289,7 @@
     .mapcard svg{height:auto}
     header,.subbar,.noprint,.print-hide{display:none!important}
     .printonly{display:block}
+    .wrap{position:relative}
     .screen-hide:not(.print-hide){display:block!important}
     .wrap{display:block;padding:0;gap:0}
     .card{border:none;box-shadow:none;padding:0;margin:0 0 8px;break-inside:avoid}
@@ -332,7 +334,10 @@
     body.stn-many td.ins{font-size:9px;white-space:normal}
     body.split-list .half2{display:block}
     body.split-list .listwrap{gap:7mm}
-    #printHead{margin:0 0 10px;border-bottom:2px solid #004990;padding-bottom:6px}
+    #printHead{margin:0 0 10px;border-bottom:2px solid #004990;padding-bottom:6px;padding-right:44mm;position:relative}
+    #qrWrap{display:block;position:absolute;top:0;right:0;text-align:center;width:40mm}
+    #qrWrap canvas{width:33mm;height:33mm;image-rendering:pixelated;display:block;margin:0 auto}
+    #qrWrap .qrcap{font-size:7.5px;line-height:1.25;color:#333;margin-top:2px;letter-spacing:.02em}
     #printHead .ph-top{display:flex;align-items:baseline;gap:10px}
     #printHead .ph-co{font-size:14px;font-weight:800;letter-spacing:.1em;color:#004990;text-transform:uppercase}
     #printHead .ph-rad{font-size:9px;font-weight:800;letter-spacing:.09em;color:#666;margin-left:auto}
@@ -385,6 +390,12 @@
       <div>
         <label for="turretName">Name</label>
         <input type="text" id="turretName">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="jobNo">Job / part</label>
+        <input type="text" id="jobNo" placeholder="3-P-1009-A">
       </div>
     </div>
     <div class="row">
@@ -505,6 +516,7 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
 <!-- ============ COL 4: result ============ -->
 <div class="col">
   <div id="printHead" class="printonly"></div>
+  <div id="qrWrap" class="printonly"><canvas id="qrCanvas"></canvas><div class="qrcap">Scan to report<br>speeds, feeds &amp; tool life</div></div>
 
   <div class="card print-hide">
     <h2>Layout goal <span style="text-transform:none;letter-spacing:0;font-weight:400">&mdash; click to switch</span></h2>
@@ -621,6 +633,169 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
 <div id="tip"></div>
 
 <script>
+/* ---- QR encoder (byte mode, ECC M) — verified against ISO/IEC 18004 ---- */
+// Minimal QR encoder — byte mode, versions 1..24, ECC L/M/Q. Returns a boolean matrix.
+(function(root){
+"use strict";
+const GF_EXP=new Uint8Array(512), GF_LOG=new Uint8Array(256);
+(function(){ let x=1; for(let i=0;i<255;i++){ GF_EXP[i]=x; GF_LOG[x]=i; x<<=1; if(x&0x100) x^=0x11d; }
+  for(let i=255;i<512;i++) GF_EXP[i]=GF_EXP[i-255]; })();
+const gmul=(a,b)=> (a===0||b===0)?0:GF_EXP[GF_LOG[a]+GF_LOG[b]];
+
+function rsGenerator(n){ let g=[1];
+  for(let i=0;i<n;i++){ const ng=new Array(g.length+1).fill(0);
+    for(let j=0;j<g.length;j++){ ng[j]^=gmul(g[j],1); ng[j+1]^=gmul(g[j],GF_EXP[i]); }
+    g=ng; }
+  return g; }
+function rsEncode(data,n){ const g=rsGenerator(n), res=new Array(n).fill(0);
+  for(const b of data){ const f=b^res[0]; res.shift(); res.push(0);
+    if(f!==0) for(let i=0;i<n;i++) res[i]^=gmul(g[i+1],f); }
+  return res; }
+
+// [total codewords, ec per block, group1 blocks, group1 data cw, group2 blocks, group2 data cw]
+const RS={
+ L:[[26,7,1,19,0,0],[44,10,1,34,0,0],[70,15,1,55,0,0],[100,20,1,80,0,0],[134,26,1,108,0,0],
+    [172,18,2,68,0,0],[196,20,2,78,0,0],[242,24,2,97,0,0],[292,30,2,116,0,0],[346,18,2,68,2,69],
+    [404,20,4,81,0,0],[466,24,2,92,2,93],[532,26,4,107,0,0],[581,30,3,115,1,116],[655,22,5,87,1,88],
+    [733,24,5,98,1,99],[815,28,1,107,5,108],[901,30,5,120,1,121],[991,28,3,113,4,114],[1085,28,3,107,5,108],
+    [1156,28,4,116,4,117],[1258,28,2,111,7,112],[1364,30,4,121,5,122],[1474,30,6,117,4,118]],
+ M:[[26,10,1,16,0,0],[44,16,1,28,0,0],[70,26,1,44,0,0],[100,18,2,32,0,0],[134,24,2,43,0,0],
+    [172,16,4,27,0,0],[196,18,4,31,0,0],[242,22,2,38,2,39],[292,22,3,36,2,37],[346,26,4,43,1,44],
+    [404,30,1,50,4,51],[466,22,6,36,2,37],[532,22,8,37,1,38],[581,24,4,40,5,41],[655,24,5,41,5,42],
+    [733,28,7,45,3,46],[815,28,10,46,1,47],[901,26,9,43,4,44],[991,26,3,44,11,45],[1085,26,3,41,13,42],
+    [1156,26,17,42,0,0],[1258,28,17,46,0,0],[1364,28,4,47,14,48],[1474,28,6,45,14,46]],
+ Q:[[26,13,1,13,0,0],[44,22,1,22,0,0],[70,18,2,17,0,0],[100,26,2,24,0,0],[134,18,2,15,2,16],
+    [172,24,4,19,0,0],[196,18,2,14,4,15],[242,22,4,18,2,19],[292,20,4,16,4,17],[346,24,6,19,2,20],
+    [404,28,4,22,4,23],[466,26,4,20,6,21],[532,24,8,20,4,21],[581,20,11,16,5,17],[655,30,5,24,7,25],
+    [733,24,15,19,2,20],[815,28,1,22,15,23],[901,28,17,22,1,23],[991,26,17,21,4,22],[1085,30,15,24,5,25],
+    [1156,28,17,22,6,23],[1258,30,7,24,16,25],[1364,30,11,24,14,25],[1474,30,3,24,16,25]]};
+
+const ALIGN=[[],[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],
+ [6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],
+ [6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106]];
+
+function bch15_5(d){ let v=d<<10; for(let i=14;i>=10;i--) if(v>>i&1) v^=0x537<<(i-10); return ((d<<10)|v)^0x5412; }
+function bch18_6(d){ let v=d<<12; for(let i=17;i>=12;i--) if(v>>i&1) v^=0x1f25<<(i-12); return (d<<12)|v; }
+
+function encode(text, ecl){
+  ecl = ecl||"M";
+  const bytes = new TextEncoder().encode(text);
+  const tbl = RS[ecl];
+  let ver=-1;
+  for(let v=1;v<=tbl.length;v++){
+    const [tot,ecc,b1,d1,b2,d2]=tbl[v-1];
+    const cap=b1*d1+b2*d2;
+    const cci = v<10?8:16;
+    const need = Math.ceil((4+cci+bytes.length*8)/8);
+    if(need<=cap){ ver=v; break; }
+  }
+  if(ver<0) throw new Error("payload too long for QR (max ~"+ (RS[ecl][RS[ecl].length-1][2]*RS[ecl][RS[ecl].length-1][3]) +" bytes)");
+  const [tot,eccLen,b1,d1,b2,d2]=tbl[ver-1];
+  const dataCw=b1*d1+b2*d2;
+
+  // --- bitstream
+  const bits=[];
+  const put=(val,len)=>{ for(let i=len-1;i>=0;i--) bits.push((val>>i)&1); };
+  put(4,4);
+  put(bytes.length, ver<10?8:16);
+  for(const b of bytes) put(b,8);
+  const capBits=dataCw*8;
+  for(let i=0;i<4 && bits.length<capBits;i++) bits.push(0);
+  while(bits.length%8) bits.push(0);
+  const pad=[0xEC,0x11]; let pi=0;
+  while(bits.length<capBits){ put(pad[pi++%2],8); }
+  const dcw=[]; for(let i=0;i<bits.length;i+=8){ let v=0; for(let j=0;j<8;j++) v=(v<<1)|bits[i+j]; dcw.push(v); }
+
+  // --- blocks + interleave
+  const blocks=[], eccs=[]; let p=0;
+  for(let i=0;i<b1;i++){ const b=dcw.slice(p,p+d1); p+=d1; blocks.push(b); eccs.push(rsEncode(b,eccLen)); }
+  for(let i=0;i<b2;i++){ const b=dcw.slice(p,p+d2); p+=d2; blocks.push(b); eccs.push(rsEncode(b,eccLen)); }
+  const maxD=Math.max(d1,d2||0), out=[];
+  for(let i=0;i<maxD;i++) for(const b of blocks) if(i<b.length) out.push(b[i]);
+  for(let i=0;i<eccLen;i++) for(const e of eccs) out.push(e[i]);
+
+  // --- matrix
+  const size=ver*4+17;
+  const m=Array.from({length:size},()=>new Array(size).fill(null));
+  const set=(r,c,v)=>{ m[r][c]=v; };
+  const finder=(r,c)=>{ for(let i=-1;i<=7;i++) for(let j=-1;j<=7;j++){
+      const rr=r+i, cc=c+j; if(rr<0||cc<0||rr>=size||cc>=size) continue;
+      const on = (i>=0&&i<=6&&(j===0||j===6)) || (j>=0&&j<=6&&(i===0||i===6)) || (i>=2&&i<=4&&j>=2&&j<=4);
+      set(rr,cc,on?1:0); } };
+  finder(0,0); finder(0,size-7); finder(size-7,0);
+  for(let i=8;i<size-8;i++){ const v=(i%2===0)?1:0; if(m[6][i]===null) set(6,i,v); if(m[i][6]===null) set(i,6,v); }
+  const ac=ALIGN[ver];
+  for(const r of ac) for(const c of ac){
+    if((r<=8&&c<=8)||(r<=8&&c>=size-9)||(r>=size-9&&c<=8)) continue;
+    for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++)
+      set(r+i,c+j, (Math.abs(i)===2||Math.abs(j)===2||(i===0&&j===0))?1:0); }
+  set(size-8,8,1);                                    // dark module
+  if(ver>=7){ const v=bch18_6(ver);
+    for(let i=0;i<18;i++){ const b=(v>>i)&1, r=Math.floor(i/3), c=i%3;
+      set(size-11+c, r, b); set(r, size-11+c, b); } }
+  // reserve format areas
+  const fmtCells=[];
+  for(let i=0;i<=8;i++){ if(i!==6) fmtCells.push([8,i]); }
+  for(let i=0;i<=8;i++){ if(i!==6&&i!==8) fmtCells.push([i,8]); }
+  for(let i=0;i<8;i++) fmtCells.push([size-1-i,8]);
+  for(let i=0;i<8;i++) fmtCells.push([8,size-1-i]);
+  const reserved=new Set(fmtCells.map(([r,c])=>r+","+c));
+  for(const [r,c] of fmtCells) if(m[r][c]===null) set(r,c,0);
+
+  // --- data placement
+  const free=(r,c)=> m[r][c]===null;
+  let bi=0, up=true;
+  const bitAt=i=> (i>>3)<out.length ? (out[i>>3]>>(7-(i&7)))&1 : 0;
+  for(let col=size-1;col>0;col-=2){
+    if(col===6) col--;
+    for(let k=0;k<size;k++){
+      const row = up? size-1-k : k;
+      for(const c of [col,col-1]) if(free(row,c)){ m[row][c]=bitAt(bi++)?1:0; m[row][c]|=2; }
+    }
+    up=!up;
+  }
+  // mask bit 2 marks data modules
+  const isData=(r,c)=> (m[r][c]&2)===2;
+  const MASKS=[ (r,c)=>((r+c)%2===0), (r,c)=>(r%2===0), (r,c)=>(c%3===0), (r,c)=>((r+c)%3===0),
+    (r,c)=>((Math.floor(r/2)+Math.floor(c/3))%2===0), (r,c)=>(((r*c)%2)+((r*c)%3)===0),
+    (r,c)=>((((r*c)%2)+((r*c)%3))%2===0), (r,c)=>((((r+c)%2)+((r*c)%3))%2===0) ];
+
+  function applyMask(mi){
+    const g=m.map(row=>row.map(v=>v===null?0:(v&1)));
+    for(let r=0;r<size;r++) for(let c=0;c<size;c++) if(isData(r,c) && MASKS[mi](r,c)) g[r][c]^=1;
+    const fmt=bch15_5(({L:1,M:0,Q:3,H:2})[ecl]<<3 | mi);
+    for(let i=0;i<15;i++){
+      const b=(fmt>>i)&1;
+      if(i<6) g[8][i]=b; else if(i<8) g[8][i+1]=b; else if(i===8) g[7][8]=b; else g[14-i][8]=b;
+      if(i<8) g[size-1-i][8]=b; else g[8][size-15+i]=b;
+    }
+    g[size-8][8]=1;
+    return g;
+  }
+  function penalty(g){
+    let p=0;
+    for(let r=0;r<size;r++){ let run=1; for(let c=1;c<size;c++){ if(g[r][c]===g[r][c-1]) run++; else { if(run>=5)p+=3+(run-5); run=1; } } if(run>=5)p+=3+(run-5); }
+    for(let c=0;c<size;c++){ let run=1; for(let r=1;r<size;r++){ if(g[r][c]===g[r-1][c]) run++; else { if(run>=5)p+=3+(run-5); run=1; } } if(run>=5)p+=3+(run-5); }
+    for(let r=0;r<size-1;r++) for(let c=0;c<size-1;c++){ const v=g[r][c]; if(v===g[r][c+1]&&v===g[r+1][c]&&v===g[r+1][c+1]) p+=3; }
+    const pat=[1,0,1,1,1,0,1,0,0,0,0], pat2=[0,0,0,0,1,0,1,1,1,0,1];
+    const hit=(arr)=>{ let n=0;
+      for(let r=0;r<size;r++) for(let c=0;c<=size-11;c++){ let ok=true; for(let i=0;i<11;i++) if(g[r][c+i]!==arr[i]){ok=false;break;} if(ok)n++; }
+      for(let c=0;c<size;c++) for(let r=0;r<=size-11;r++){ let ok=true; for(let i=0;i<11;i++) if(g[r+i][c]!==arr[i]){ok=false;break;} if(ok)n++; }
+      return n; };
+    p+=40*(hit(pat)+hit(pat2));
+    let dark=0; for(let r=0;r<size;r++) for(let c=0;c<size;c++) dark+=g[r][c];
+    p+=10*Math.floor(Math.abs(dark*100/(size*size)-50)/5);
+    return p;
+  }
+  let best=null, bestP=Infinity;
+  for(let mi=0;mi<8;mi++){ const g=applyMask(mi), p=penalty(g); if(p<bestP){bestP=p;best=g;} }
+  return {size, modules:best, version:ver, ecl};
+}
+root.QR={encode};
+})(typeof window!=="undefined"?window:globalThis);
+
+</script>
+<script>
 "use strict";
 /* ---------------------------------------------------------------- state */
 const S = {
@@ -637,6 +812,8 @@ const S = {
   rules: [],       // clearance rules
   lib: [],         // tool library — name / insert / insert location
   sheet: {url:"",auto:false},   // optional Google Sheet backing the library
+  job: "",         // part / op this setup is for
+  reportBase: "", // where the QR points
   done: {},        // station -> ticked off during changeover
   mode: "opt",     // "opt" | "seq" | "cur"  — which layout goal is showing
   opt: null        // cached optimizer result {layout,cost,leftOff}
@@ -1052,7 +1229,7 @@ function invalidate(){
 function toolById(id){ return S.tools.find(t=>t.id===id); }
 function stnLabel(p){ return "T"+String(p+1).padStart(2,"0"); }
 
-function renderAll(){ renderTurret(); renderLib(); renderTools(); renderRules(); renderSeq(); renderModeBar(); renderStats(); renderDiagram(); renderTables(); renderPrintHead(); document.body.classList.toggle('stn-few', T().stations<=17);
+function renderAll(){ renderTurret(); renderLib(); renderTools(); renderRules(); renderSeq(); renderModeBar(); renderStats(); renderDiagram(); renderTables(); renderPrintHead(); renderQR(); document.body.classList.toggle('stn-few', T().stations<=17);
   document.body.classList.toggle('stn-many', T().stations>17); }
 
 function renderModeBar(){
@@ -1088,6 +1265,7 @@ function renderTurret(){
   sel.value=S.active;
   const t=T();
   $("turretName").value=t.name;
+  $("jobNo").value=S.job||"";
   const st=$("stations");
   if(st.options.length===0){ for(let n=8;n<=32;n++){ const o=document.createElement("option"); o.value=n;o.textContent=n; st.appendChild(o);} }
   st.value=t.stations; $("model").value=t.model; $("secPer").value=t.secPer; $("loopCycle").checked=t.loop;
@@ -1397,6 +1575,39 @@ function renderDiagram(){
   });
 }
 
+// what the setup-sheet QR carries: everything the report page needs, no lookup
+function setupPayload(){
+  const t=T(), at={};
+  for(const [id,p] of Object.entries(S.layout)) at[p]=+id;
+  const rows=[];
+  for(let i=0;i<t.stations;i++){
+    const tl = at[i]!==undefined? toolById(at[i]) : null;
+    if(tl) rows.push((i+1)+":"+tl.name.replace(/[|~:]/g," "));
+  }
+  return ["1", (S.job||"").replace(/[|~]/g," "), t.name.replace(/[|~]/g," "), t.stations, rows.join("~")].join("|");
+}
+function reportUrl(){
+  let base=(S.reportBase||"").trim();
+  if(!base){
+    base = location.protocol==="file:" ? "https://alexandersmachineshoptraining.com/report.html"
+         : location.origin + location.pathname.replace(/[^/]*$/, "report.html");
+  }
+  return base + "#" + encodeURIComponent(setupPayload());
+}
+function renderQR(){
+  const cv=$("qrCanvas"); if(!cv) return;
+  try{
+    const q=QR.encode(reportUrl(),"M");
+    const s=4, quiet=4, dim=(q.size+quiet*2)*s;
+    cv.width=dim; cv.height=dim;
+    const x=cv.getContext("2d");
+    x.fillStyle="#fff"; x.fillRect(0,0,dim,dim); x.fillStyle="#000";
+    for(let r=0;r<q.size;r++) for(let c=0;c<q.size;c++)
+      if(q.modules[r][c]) x.fillRect((c+quiet)*s,(r+quiet)*s,s,s);
+    cv.dataset.version=q.version;
+  }catch(e){ cv.width=cv.height=1; cv.dataset.version="err"; }
+}
+
 function renderPrintHead(){
   const t=T(), s=cleanSeq();
   const rep=ruleReport(S.layout).filter(x=>!x.broken);
@@ -1641,6 +1852,7 @@ $("mirror").onclick=()=>{ const P=T().stations, blocked=new Set(T().blocked); co
   S.layout=nl; err(""); renderAll(); };
 
 $("turretSel").onchange = e=>{ S.active=+e.target.value; S.layout={}; S.opt=null; applyMode(S.mode,true); };
+$("jobNo").oninput = e=>{ S.job=e.target.value; renderPrintHead(); renderQR(); };
 $("turretName").oninput = e=>{ T().name=e.target.value; const s=$("turretSel"); s.options[S.active].textContent=`${e.target.value} — ${T().stations} stn`; renderDiagram(); };
 $("stations").onchange = e=>{ const t=T(); t.stations=+e.target.value; t.blocked=t.blocked.filter(b=>b<=t.stations);
   S.tools.forEach(tl=>{ if(tl.pin>t.stations) tl.pin=null; if(tl.cur>t.stations) tl.cur=null; }); S.layout={}; S.opt=null; applyMode(S.mode,true); };

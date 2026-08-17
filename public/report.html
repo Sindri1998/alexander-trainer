@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#004990">
+<title>Tool Report — Alexander Machine Shop</title>
+<style>
+  :root{
+    --brand:#004990;--brand-deep:#00376d;--surface-0:#eef1f4;--surface-1:#fff;--surface-2:#e6ebf0;
+    --line:#d3dae1;--line-strong:#b3bec8;--text:#10171d;--text-2:#4a5760;--muted:#78858f;
+    --good:#1a7f37;--warn:#c1272d;--radius:8px;color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --surface-0:#0d1218;--surface-1:#161c22;--surface-2:#202832;--line:#2c353f;--line-strong:#46525d;
+    --text:#f2f5f8;--text-2:#b3c0cb;--muted:#8595a1;--good:#46b56a;--warn:#e4595e;color-scheme:dark;}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-0);color:var(--text);
+    font:16px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding-bottom:96px;-webkit-text-size-adjust:100%}
+  header{background:var(--brand);border-bottom:3px solid var(--brand-deep);padding:10px 14px;
+    position:sticky;top:0;z-index:5}
+  .co{color:#fff;font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+  .sub{color:#b8d3ec;font-size:12px;margin-top:1px}
+  .wrap{padding:12px;max-width:720px;margin:0 auto}
+  .job{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px;margin-bottom:12px}
+  .job .k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .job .v{font-size:19px;font-weight:700}
+  .job .m{font-size:13px;color:var(--text-2);margin-top:2px}
+  label{display:block;font-size:12px;color:var(--text-2);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:11px 10px;border:1px solid var(--line-strong);
+    border-radius:var(--radius);background:var(--surface-1);color:var(--text);font:inherit;font-size:16px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  .tool{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius);
+    margin-bottom:10px;overflow:hidden}
+  .tool > summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px}
+  .tool > summary::-webkit-details-marker{display:none}
+  .stn{background:var(--brand);color:#fff;font-weight:800;font-size:13px;border-radius:6px;
+    padding:5px 8px;min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+  .tname{font-weight:650;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chev{color:var(--muted);font-size:13px}
+  .filled .stn{background:var(--good)}
+  .body{padding:0 14px 14px;border-top:1px solid var(--surface-2)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px}
+  .grid .full{grid-column:1/-1}
+  .hint{font-size:11px;color:var(--muted);margin-top:3px}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface-1);border-top:1px solid var(--line);
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:10px;align-items:center}
+  button{font:inherit;font-size:15px;padding:13px 16px;border-radius:var(--radius);
+    border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);cursor:pointer}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700;flex:1}
+  button.primary:disabled{opacity:.5}
+  .note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.45}
+  .err{color:var(--warn);font-weight:600}
+  .ok{color:var(--good);font-weight:600}
+  .setupbox{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-top:12px}
+  .setupbox h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);margin:0 0 8px}
+  #queued{font-size:12px;color:var(--warn)}
+</style>
+</head>
+<body>
+<header>
+  <div class="co">Alexander Machine Shop</div>
+  <div class="sub">Tool performance report</div>
+</header>
+<div class="wrap">
+  <div class="job">
+    <div class="k">Job / part</div>
+    <div class="v" id="jobV">—</div>
+    <div class="m" id="jobM"></div>
+  </div>
+
+  <div id="who" class="job">
+    <label for="op">Your name</label>
+    <input type="text" id="op" placeholder="who ran it" autocomplete="name">
+    <div class="grid" style="margin-top:9px">
+      <div><label for="matl">Material</label><input type="text" id="matl" placeholder="4140, 304…"></div>
+      <div><label for="mach">Machine</label><input type="text" id="mach" placeholder="DNT2600M"></div>
+    </div>
+  </div>
+
+  <div id="tools"></div>
+  <div id="empty" class="note" hidden>No tools in this code. Scan the QR on a printed setup sheet.</div>
+
+  <details class="setupbox">
+    <summary style="cursor:pointer;font-size:13px;color:var(--text-2)">Where reports are sent</summary>
+    <div style="margin-top:10px">
+      <label for="endpoint">Apps Script web-app URL</label>
+      <input type="text" id="endpoint" placeholder="https://script.google.com/macros/s/…/exec">
+      <div class="note">Saved on this phone. Ask whoever set up the sheet for this link, or open the
+        planner's Library panel where the same URL is listed.</div>
+      <div class="note" id="queued"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="retry">Send queued</button>
+        <button id="dl">Download CSV</button>
+      </div>
+    </div>
+  </details>
+  <div class="note" id="stat"></div>
+</div>
+
+<div class="bar">
+  <button class="primary" id="send">Submit report</button>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const EP_KEY="ams-report-endpoint", Q_KEY="ams-report-queue", ME_KEY="ams-report-me";
+const store={
+  get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(_){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(_){ return false; } }
+};
+
+/* ---- read the setup out of the QR payload ---- */
+function parsePayload(){
+  const raw=decodeURIComponent((location.hash||"").replace(/^#/,""));
+  if(!raw) return null;
+  const p=raw.split("|");
+  if(p[0]!=="1") return null;
+  const tools=(p[4]||"").split("~").filter(Boolean).map(x=>{
+    const i=x.indexOf(":");
+    return {stn:+x.slice(0,i), name:x.slice(i+1)};
+  });
+  return {job:p[1]||"", turret:p[2]||"", stations:+p[3]||0, tools};
+}
+const setup=parsePayload();
+
+/* ---- build the form ---- */
+function toolCard(t,i){
+  const d=document.createElement("details"); d.className="tool"; d.dataset.i=i;
+  d.innerHTML=`
+    <summary>
+      <span class="stn">T${String(t.stn).padStart(2,"0")}</span>
+      <span class="tname">${esc(t.name)}</span>
+      <span class="chev">tap to fill</span>
+    </summary>
+    <div class="body">
+      <div class="grid">
+        <div><label>SFM</label><input inputmode="decimal" data-f="sfm"></div>
+        <div><label>RPM</label><input inputmode="numeric" data-f="rpm"></div>
+        <div><label>Feed IPR</label><input inputmode="decimal" data-f="ipr"></div>
+        <div><label>Feed IPM</label><input inputmode="decimal" data-f="ipm"></div>
+        <div><label>Depth of cut</label><input inputmode="decimal" data-f="doc"></div>
+        <div><label>Width of cut</label><input inputmode="decimal" data-f="woc"></div>
+        <div><label>Parts per edge</label><input inputmode="numeric" data-f="parts"></div>
+        <div><label>Minutes in cut</label><input inputmode="decimal" data-f="mins"></div>
+        <div class="full"><label>How it ended</label>
+          <select data-f="outcome">
+            <option value="">—</option>
+            <option>Still running</option><option>Worn — indexed</option>
+            <option>Chipped</option><option>Broke</option><option>Scrapped part</option>
+          </select></div>
+        <div class="full"><label>Notes</label><textarea rows="2" data-f="notes" placeholder="chatter, finish, coolant…"></textarea></div>
+      </div>
+      <div class="hint">Leave a tool blank and it won't be sent.</div>
+    </div>`;
+  d.addEventListener("input",()=>{
+    const any=[...d.querySelectorAll("[data-f]")].some(e=>e.value.trim()!=="");
+    d.classList.toggle("filled",any);
+    d.querySelector(".chev").textContent = any? "filled" : "tap to fill";
+  });
+  return d;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+if(setup && setup.tools.length){
+  $("jobV").textContent = setup.job || "(no job number)";
+  $("jobM").textContent = `${setup.turret} · ${setup.stations} stations · ${setup.tools.length} tools`;
+  const box=$("tools"); setup.tools.forEach((t,i)=>box.appendChild(toolCard(t,i)));
+}else{
+  $("empty").hidden=false; $("send").disabled=true;
+  $("jobM").textContent="Nothing scanned";
+}
+
+/* ---- gather + send ---- */
+$("op").value = store.get(ME_KEY,"");
+$("endpoint").value = store.get(EP_KEY,"");
+$("op").addEventListener("input",()=>store.set(ME_KEY,$("op").value));
+$("endpoint").addEventListener("input",()=>store.set(EP_KEY,$("endpoint").value.trim()));
+
+function collect(){
+  const rows=[]; const stamp=new Date().toISOString();
+  document.querySelectorAll(".tool").forEach(d=>{
+    const t=setup.tools[+d.dataset.i], r={};
+    d.querySelectorAll("[data-f]").forEach(e=>{ if(e.value.trim()!=="") r[e.dataset.f]=e.value.trim(); });
+    if(!Object.keys(r).length) return;
+    rows.push(Object.assign({
+      ts:stamp, job:setup.job, turret:setup.turret, station:t.stn, tool:t.name,
+      operator:$("op").value.trim(), material:$("matl").value.trim(), machine:$("mach").value.trim()
+    }, r));
+  });
+  return rows;
+}
+function queueCount(){ return store.get(Q_KEY,[]).length; }
+function showQueue(){
+  const n=queueCount();
+  $("queued").textContent = n? `${n} report${n===1?"":"s"} waiting to send.` : "";
+}
+async function post(rows){
+  const url=store.get(EP_KEY,"");
+  if(!url) throw new Error("no endpoint");
+  await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({rows})});
+  return true;                       // no-cors gives an opaque response; treat reaching the network as sent
+}
+$("send").onclick = async ()=>{
+  const rows=collect();
+  if(!rows.length){ stat("Nothing filled in yet — open a tool and enter its numbers.", true); return; }
+  $("send").disabled=true; stat("Sending…");
+  try{
+    await post(rows);
+    stat(`Sent ${rows.length} tool report${rows.length===1?"":"s"}. Thanks.`);
+    document.querySelectorAll(".tool").forEach(d=>{ d.open=false;
+      d.querySelectorAll("[data-f]").forEach(e=>e.value=""); d.classList.remove("filled");
+      d.querySelector(".chev").textContent="tap to fill"; });
+  }catch(e){
+    const q=store.get(Q_KEY,[]); q.push(...rows); store.set(Q_KEY,q); showQueue();
+    stat("Saved on this phone — no connection or no link set. It'll send when you tap Send queued.", true);
+  }
+  $("send").disabled=false;
+};
+$("retry").onclick = async ()=>{
+  const q=store.get(Q_KEY,[]);
+  if(!q.length){ stat("Nothing queued."); return; }
+  try{ await post(q); store.set(Q_KEY,[]); showQueue(); stat(`Sent ${q.length} queued report${q.length===1?"":"s"}.`); }
+  catch(e){ stat("Still can't reach the sheet.", true); }
+};
+$("dl").onclick = ()=>{
+  const rows=collect().concat(store.get(Q_KEY,[]));
+  if(!rows.length){ stat("Nothing to download."); return; }
+  const cols=["ts","job","turret","machine","material","operator","station","tool","sfm","rpm","ipr","ipm","doc","woc","parts","mins","outcome","notes"];
+  const csv=[cols.join(",")].concat(rows.map(r=>cols.map(c=>{
+    const v=(r[c]==null?"":String(r[c]));
+    return /[",\n]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v;
+  }).join(","))).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download="tool_reports.csv"; a.click(); URL.revokeObjectURL(a.href);
+};
+function stat(msg,bad){ const e=$("stat"); e.textContent=msg; e.className="note "+(bad?"err":"ok"); }
+showQueue();
+</script>
+</body>
+</html>
