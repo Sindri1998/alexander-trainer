@@ -254,6 +254,16 @@
   .swatchrow{display:flex;flex-wrap:wrap;gap:5px}
   .sw{width:24px;height:24px;border-radius:4px;border:1px solid var(--line-strong);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;background:var(--surface-1);color:var(--text-secondary)}
   .sw.blocked{background:var(--blocked);color:#fff;border-color:var(--blocked)}
+  .modal{position:fixed;inset:0;background:rgba(8,14,20,.55);display:flex;align-items:center;
+    justify-content:center;z-index:60;padding:20px}
+  .modal[hidden]{display:none}
+  .modal .sheet{background:var(--surface-1);border:1px solid var(--line-strong);border-radius:var(--radius);
+    box-shadow:0 12px 40px rgba(0,0,0,.35);padding:16px;width:min(720px,96vw);max-height:92vh;
+    display:flex;flex-direction:column}
+  .modal .sheet h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);
+    font-weight:800;margin:0 0 10px;padding-bottom:5px;border-bottom:2px solid var(--surface-2)}
+  :root[data-theme="dark"] .modal .sheet h2{color:var(--accent-ink)}
+  @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .modal .sheet h2{color:var(--accent-ink)}}
   #tip{position:fixed;pointer-events:none;background:var(--brand-deep);color:#fff;padding:5px 8px;border-radius:5px;font-size:12px;opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap}
   .printonly{display:none}
   .screen-hide{display:none!important}
@@ -430,7 +440,11 @@
   <div class="card grow">
     <h2>Tools</h2>
     <div class="row">
-      <div><label for="newTool">Add tool</label><input type="text" id="newTool" placeholder="e.g. OD ROUGH 80&deg;"></div>
+      <div><label for="libPick">Add from library</label><select id="libPick"></select></div>
+      <div style="flex:0 0 auto"><button id="manageLib" title="Add, edit and delete your tooling">Library&hellip;</button></div>
+    </div>
+    <div class="row">
+      <div><label for="newTool">Or type a one-off</label><input type="text" id="newTool" placeholder="e.g. OD ROUGH 80&deg;"></div>
       <div style="flex:0 0 auto"><button id="addTool" class="primary">Add</button></div>
       <div style="flex:0 0 auto"><button id="pruneTools" title="Delete tools that aren't in the sequence">Prune</button></div>
     </div>
@@ -539,6 +553,32 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
     </div>
   </div>
 </div>
+<div id="libModal" class="modal noprint" hidden>
+  <div class="sheet">
+    <h2>Tool library <span id="libCount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <div class="scroll" style="max-height:46vh">
+      <table id="libTable">
+        <thead><tr><th>Tool</th><th style="width:30%">Insert</th><th style="width:24%">Insert location</th><th style="width:26px"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label for="libNewName">Tool</label><input type="text" id="libNewName" placeholder="OD ROUGH 80&deg;"></div>
+      <div><label for="libNewIns">Insert</label><input type="text" id="libNewIns" placeholder="CNMG 432"></div>
+      <div><label for="libNewLoc">Location</label><input type="text" id="libNewLoc" placeholder="BIN 12"></div>
+      <div style="flex:0 0 auto"><button id="libAdd" class="primary">Add</button></div>
+    </div>
+    <div class="btnrow" style="margin-top:4px">
+      <button id="libFromLayout" title="Copy every tool currently on the turret into the library">Import from layout</button>
+      <button id="libExport">Export (.json)</button>
+      <button id="libImport">Import</button>
+      <input type="file" id="libFile" accept=".json" style="display:none">
+      <div style="flex:1"></div>
+      <button id="libClose" class="primary">Done</button>
+    </div>
+    <div id="libNote" class="note"></div>
+  </div>
+</div>
 <div id="tip"></div>
 
 <script>
@@ -556,11 +596,31 @@ const S = {
   nextTool: 1,
   nextTurret: 3,
   rules: [],       // clearance rules
+  lib: [],         // tool library — name / insert / insert location
   done: {},        // station -> ticked off during changeover
   mode: "opt",     // "opt" | "seq" | "cur"  — which layout goal is showing
   opt: null        // cached optimizer result {layout,cost,leftOff}
 };
 const T = () => S.turrets[S.active];
+
+/* ------------------------------------------------------ tool library ---- */
+const LIB_KEY = "ams-turret-library-v1";
+// seeded with the shop's tooling; edit freely in Library…
+const DEFAULT_LIB = [
+  {name:"OD ROUGH 80\u00b0",  ins:"CNMG 432",             loc:""},
+  {name:"OD FINISH 35\u00b0", ins:"DNMG 432",             loc:""},
+  {name:"CENTER DRILL",    ins:"#16 BELL",             loc:""},
+  {name:"GUN DRILL",       ins:"1/4 X 6.3 INCH",       loc:""},
+  {name:"BIG DRILL",       ins:"1 INCH SUMOCHAM",      loc:""},
+  {name:"BORING BAR",      ins:"TCMT21.52ESU-AC8025P", loc:""},
+  {name:"ID GROOVE",       ins:".125 LEFT HAND",       loc:""},
+  {name:"TAP",             ins:"5/16 X 18",            loc:""},
+];
+let libSaves = true;                       // false when the browser blocks storage
+const lib = {
+  load(){ try{ const v=localStorage.getItem(LIB_KEY); return v? JSON.parse(v) : null; }catch(_){ libSaves=false; return null; } },
+  save(v){ try{ localStorage.setItem(LIB_KEY, JSON.stringify(v)); libSaves=true; }catch(_){ libSaves=false; } }
+};
 const $ = id => document.getElementById(id);
 
 /* ---------------------------------------------------------------- math */
@@ -891,7 +951,7 @@ function invalidate(){
 function toolById(id){ return S.tools.find(t=>t.id===id); }
 function stnLabel(p){ return "T"+String(p+1).padStart(2,"0"); }
 
-function renderAll(){ renderTurret(); renderTools(); renderRules(); renderSeq(); renderModeBar(); renderStats(); renderDiagram(); renderTables(); renderPrintHead(); document.body.classList.toggle('stn-few', T().stations<=17);
+function renderAll(){ renderTurret(); renderLib(); renderTools(); renderRules(); renderSeq(); renderModeBar(); renderStats(); renderDiagram(); renderTables(); renderPrintHead(); document.body.classList.toggle('stn-few', T().stations<=17);
   document.body.classList.toggle('stn-many', T().stations>17); }
 
 function renderModeBar(){
@@ -1046,6 +1106,35 @@ function initSeqDrag(){
     if(again) again.focus();
   });
 }
+
+function renderLib(){
+  const sel=$("libPick");
+  sel.innerHTML='<option value="">— pick a tool —</option>';
+  S.lib.forEach((t,i)=>{
+    const o=document.createElement("option");
+    o.value=i; o.textContent = t.name + (t.ins? "  ·  "+t.ins : "");
+    sel.appendChild(o);
+  });
+  const tb=$("libTable").querySelector("tbody"); tb.innerHTML="";
+  S.lib.forEach((t,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><input type="text" data-k="name" value="${esc(t.name)}"></td>
+      <td><input type="text" data-k="ins" value="${esc(t.ins||"")}"></td>
+      <td><input type="text" data-k="loc" value="${esc(t.loc||"")}"></td>
+      <td><button class="mini" data-k="del" title="Remove from library">&times;</button></td>`;
+    tr.querySelector('[data-k="name"]').oninput=e=>{ t.name=e.target.value; saveLib(); };
+    tr.querySelector('[data-k="ins"]').oninput =e=>{ t.ins =e.target.value; saveLib(); };
+    tr.querySelector('[data-k="loc"]').oninput =e=>{ t.loc =e.target.value; saveLib(); };
+    tr.querySelector('[data-k="del"]').onclick =()=>{ S.lib.splice(i,1); saveLib(); renderLib(); };
+    tb.appendChild(tr);
+  });
+  $("libCount").textContent = `— ${S.lib.length} tool${S.lib.length===1?"":"s"}`;
+  $("libNote").textContent = libSaves
+    ? "Saved in this browser, so it's here next time. Export a copy to move it to another machine."
+    : "This browser is blocking storage, so the library lasts only for this session — use Export to keep it.";
+  $("libNote").style.color = libSaves ? "" : "var(--warn)";
+}
+function saveLib(){ lib.save(S.lib); renderLib(); }
 
 function renderRules(){
   const box=$("ruleList"); box.innerHTML="";
@@ -1315,6 +1404,62 @@ function runOptimize(){
   S.opt=null; applyMode("opt");
 }
 
+$("libPick").onchange = e=>{
+  const i=+e.target.value; e.target.value="";
+  const src=S.lib[i]; if(!src) return;
+  const tl=findOrAddTool(src.name);
+  if(tl){
+    if(!tl.ins && src.ins) tl.ins=src.ins;          // don't clobber an edit
+    if(!tl.loc && src.loc) tl.loc=src.loc;
+    S.seq.push(tl.id);
+  }
+  invalidate(); renderAll();
+};
+$("manageLib").onclick = ()=>{ renderLib(); $("libModal").hidden=false; $("libNewName").focus(); };
+$("libClose").onclick  = ()=>{ $("libModal").hidden=true; };
+$("libModal").addEventListener("click", e=>{ if(e.target.id==="libModal") $("libModal").hidden=true; });
+addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("libModal").hidden) $("libModal").hidden=true; });
+$("libAdd").onclick = ()=>{
+  const n=$("libNewName").value.trim(); if(!n) return;
+  S.lib.push({name:n, ins:$("libNewIns").value.trim(), loc:$("libNewLoc").value.trim()});
+  $("libNewName").value=$("libNewIns").value=$("libNewLoc").value="";
+  saveLib(); $("libNewName").focus();
+};
+$("libNewLoc").addEventListener("keydown",e=>{ if(e.key==="Enter") $("libAdd").click(); });
+$("libNewName").addEventListener("keydown",e=>{ if(e.key==="Enter") $("libAdd").click(); });
+$("libFromLayout").onclick = ()=>{
+  let added=0;
+  for(const tl of S.tools){
+    const hit=S.lib.find(x=>x.name.toLowerCase()===tl.name.toLowerCase());
+    if(hit){ if(!hit.ins&&tl.ins) hit.ins=tl.ins; if(!hit.loc&&tl.loc) hit.loc=tl.loc; }
+    else { S.lib.push({name:tl.name, ins:tl.ins||"", loc:tl.loc||""}); added++; }
+  }
+  saveLib();
+  $("libNote").textContent = added? `Added ${added} tool${added===1?"":"s"} from the layout.` : "Every tool on the turret was already in the library.";
+};
+$("libExport").onclick = ()=>{
+  const blob=new Blob([JSON.stringify({v:1,library:S.lib},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="tool_library.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+$("libImport").onclick = ()=>$("libFile").click();
+$("libFile").onchange = e=>{
+  const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{
+      const d=JSON.parse(r.result);
+      const rows=Array.isArray(d)?d:(d.library||d.lib||[]);
+      if(!Array.isArray(rows)||!rows.length) throw 0;
+      let added=0;
+      for(const row of rows){
+        const n=String(row.name||"").trim(); if(!n) continue;
+        if(S.lib.some(x=>x.name.toLowerCase()===n.toLowerCase())) continue;
+        S.lib.push({name:n, ins:String(row.ins||"").trim(), loc:String(row.loc||"").trim()}); added++;
+      }
+      saveLib();
+      $("libNote").textContent = `Imported ${added} new tool${added===1?"":"s"}.`;
+    }catch(x){ $("libNote").textContent="That file didn't contain a tool library."; $("libNote").style.color="var(--warn)"; } };
+  r.readAsText(f); e.target.value="";
+};
 $("addTool").onclick = ()=>{ const v=$("newTool").value; if(!v.trim())return; const tl=findOrAddTool(v); $("newTool").value=""; if(tl) S.seq.push(tl.id); invalidate(); renderAll(); };
 $("newTool").addEventListener("keydown",e=>{ if(e.key==="Enter") $("addTool").click(); });
 $("seqAdd").onchange = e=>{ if(e.target.value){ S.seq=cleanSeq(); S.seq.push(+e.target.value); e.target.value=""; invalidate(); renderAll(); } };
@@ -1354,14 +1499,15 @@ $("addTurret").onclick = ()=>{ S.turrets.push({id:S.nextTurret++,name:"Turret "+
 $("delTurret").onclick = ()=>{ if(S.turrets.length<2){err("Keep at least one turret profile.");return;} S.turrets.splice(S.active,1); S.active=0; S.layout={}; err(""); S.opt=null; applyMode(S.mode,true); };
 
 $("exportJson").onclick = ()=>{
-  const blob=new Blob([JSON.stringify({v:2,turrets:S.turrets,active:S.active,tools:S.tools,rules:S.rules,seq:cleanSeq(),layout:S.layout},null,2)],{type:"application/json"});
+  const blob=new Blob([JSON.stringify({v:3,turrets:S.turrets,active:S.active,tools:S.tools,rules:S.rules,library:S.lib,seq:cleanSeq(),layout:S.layout},null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=(T().name||"turret").replace(/\W+/g,"_")+"_setup.json"; a.click(); URL.revokeObjectURL(a.href);
 };
 $("importBtn").onclick = ()=>$("importFile").click();
 $("importFile").onchange = e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
   r.onload=()=>{ try{ const d=JSON.parse(r.result);
-      S.turrets=d.turrets||S.turrets; S.active=d.active||0; S.tools=d.tools||[]; S.rules=d.rules||[]; S.done={}; S.seq=d.seq||[]; S.layout=d.layout||{}; S.opt=null;
+      S.turrets=d.turrets||S.turrets; S.active=d.active||0; S.tools=d.tools||[]; S.rules=d.rules||[]; S.done={};
+      if(Array.isArray(d.library)&&d.library.length){ for(const row of d.library){ const n=String(row.name||'').trim(); if(n&&!S.lib.some(x=>x.name.toLowerCase()===n.toLowerCase())) S.lib.push({name:n,ins:row.ins||'',loc:row.loc||''}); } saveLib(); } S.seq=d.seq||[]; S.layout=d.layout||{}; S.opt=null;
       S.nextTool=Math.max(1,...S.tools.map(t=>t.id))+1; S.nextTurret=Math.max(1,...S.turrets.map(t=>t.id))+1;
       err(""); renderAll();
     }catch(x){ err("Couldn't read that file."); } };
@@ -1418,6 +1564,7 @@ function loadDemo(){
   if(po&&dr) S.rules=[{type:"opp", a:dr.id, b:po.id, n:1, tol:0}];
   runOptimize();
 }
+S.lib = lib.load() || DEFAULT_LIB.map(t=>({...t}));
 initSeqDrag();
 loadDemo();
 </script>
