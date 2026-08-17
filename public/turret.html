@@ -260,6 +260,10 @@
   .modal .sheet{background:var(--surface-1);border:1px solid var(--line-strong);border-radius:var(--radius);
     box-shadow:0 12px 40px rgba(0,0,0,.35);padding:16px;width:min(720px,96vw);max-height:92vh;
     display:flex;flex-direction:column}
+  .sheetbox{margin-top:12px;padding-top:10px;border-top:2px solid var(--surface-2)}
+  .sheetbox h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-secondary);
+    font-weight:800;margin:0 0 8px}
+  .sheetbox textarea{font-size:11.5px}
   .modal .sheet h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);
     font-weight:800;margin:0 0 10px;padding-bottom:5px;border-bottom:2px solid var(--surface-2)}
   :root[data-theme="dark"] .modal .sheet h2{color:var(--accent-ink)}
@@ -577,6 +581,41 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
       <button id="libClose" class="primary">Done</button>
     </div>
     <div id="libNote" class="note"></div>
+
+    <div class="sheetbox">
+      <h3>Google Sheet</h3>
+      <div class="row" style="margin-bottom:7px">
+        <div><label for="sheetUrl">Sheet link</label>
+          <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/&hellip;"></div>
+        <div style="flex:0 0 auto"><button id="sheetSync" class="primary">Sync</button></div>
+        <div style="flex:0 0 auto"><button id="sheetMerge" title="Add new tools from the sheet, keep everything already here">Merge</button></div>
+        <div style="flex:0 0 auto"><button id="sheetClear" title="Stop using a sheet">Unlink</button></div>
+      </div>
+      <label style="display:flex;gap:7px;align-items:center;margin:0 0 6px">
+        <input type="checkbox" id="sheetAuto" style="width:auto">
+        <span>Pull from the sheet each time the planner opens</span>
+      </label>
+      <div id="sheetStat" class="note" style="margin-top:0"></div>
+      <details>
+        <summary>Sheet setup &amp; troubleshooting</summary>
+        <div class="note">
+          Columns: <b>Tool</b>, <b>Insert</b>, <b>Insert location</b> &mdash; a header row is detected by name, and
+          without one the first three columns are used in that order.<br>
+          The sheet must be readable without signing in: <b>Share &rarr; Anyone with the link &rarr; Viewer</b>.
+          If Sync reports it was blocked, use <b>File &rarr; Share &rarr; Publish to web</b>, choose the tab,
+          pick <b>CSV</b>, and paste <i>that</i> link instead.<br>
+          Opening the planner straight off your hard drive can't reach Google &mdash; use the paste box below,
+          or open it from the website.
+        </div>
+        <label for="csvPaste">Paste the sheet contents (CSV or copied cells)</label>
+        <textarea id="csvPaste" rows="4" placeholder="Tool,Insert,Insert location&#10;OD ROUGH 80,CNMG 432,BIN A-12"></textarea>
+        <div class="btnrow" style="margin-top:6px">
+          <button id="csvLoad" class="primary">Load pasted</button>
+          <button id="csvFileBtn">Load .csv file</button>
+          <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" style="display:none">
+        </div>
+      </details>
+    </div>
   </div>
 </div>
 <div id="tip"></div>
@@ -597,6 +636,7 @@ const S = {
   nextTurret: 3,
   rules: [],       // clearance rules
   lib: [],         // tool library — name / insert / insert location
+  sheet: {url:"",auto:false},   // optional Google Sheet backing the library
   done: {},        // station -> ticked off during changeover
   mode: "opt",     // "opt" | "seq" | "cur"  — which layout goal is showing
   opt: null        // cached optimizer result {layout,cost,leftOff}
@@ -618,9 +658,70 @@ const DEFAULT_LIB = [
 ];
 let libSaves = true;                       // false when the browser blocks storage
 const lib = {
-  load(){ try{ const v=localStorage.getItem(LIB_KEY); return v? JSON.parse(v) : null; }catch(_){ libSaves=false; return null; } },
-  save(v){ try{ localStorage.setItem(LIB_KEY, JSON.stringify(v)); libSaves=true; }catch(_){ libSaves=false; } }
+  load(){
+    try{
+      const v=localStorage.getItem(LIB_KEY); if(!v) return null;
+      const d=JSON.parse(v);
+      if(Array.isArray(d)) return {tools:d, sheet:{url:"",auto:false}};   // legacy shape
+      return {tools:d.tools||[], sheet:d.sheet||{url:"",auto:false}};
+    }catch(_){ libSaves=false; return null; }
+  },
+  save(){ try{ localStorage.setItem(LIB_KEY, JSON.stringify({v:2,tools:S.lib,sheet:S.sheet})); libSaves=true; }catch(_){ libSaves=false; } }
 };
+
+/* --------------------------------------------- Google Sheet as the library */
+// Accepts a normal sheet URL or a File > Share > Publish-to-web CSV URL.
+function sheetCsvUrl(raw){
+  const u=String(raw||"").trim(); if(!u) return null;
+  if(/output=csv/i.test(u)) return u;                       // already a CSV endpoint
+  const id=(u.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)||[])[1];
+  if(!id) return null;
+  const gid=(u.match(/[#&?]gid=([0-9]+)/)||[])[1] || "0";
+  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&gid=${gid}`;
+}
+// RFC4180-ish: quoted fields, embedded commas, doubled quotes, CR/LF
+function parseCsv(text){
+  const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; }
+      else f+=c;
+    } else if(c==='"') q=true;
+    else if(c===","){ row.push(f); f=""; }
+    else if(c==="\n"){ row.push(f); rows.push(row); row=[]; f=""; }
+    else if(c!=="\r") f+=c;
+  }
+  if(f.length||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==""));
+}
+// map columns by header name, else fall back to A/B/C
+function rowsToTools(rows){
+  if(!rows.length) return [];
+  const head=rows[0].map(h=>h.trim().toLowerCase());
+  const find=(...names)=>head.findIndex(h=>names.some(n=>h===n||h.includes(n)));
+  let iN=find("tool","name","description"), iI=find("insert","grade"), iL=find("location","loc","bin","drawer","crib");
+  let body=rows;
+  if(iN>=0){ body=rows.slice(1); }                         // real header row
+  else { iN=0; iI=1; iL=2; }                                // headerless sheet
+  if(iI<0) iI=iN+1; if(iL<0) iL=iN+2;
+  const out=[];
+  for(const r of body){
+    const name=(r[iN]||"").trim(); if(!name) continue;
+    out.push({name, ins:(r[iI]||"").trim(), loc:(r[iL]||"").trim()});
+  }
+  return out;
+}
+function applySheetTools(list, mode){
+  if(mode==="replace"){ S.lib = list.map(t=>({...t})); return {added:list.length, dropped:0}; }
+  let added=0;
+  for(const t of list){
+    const hit=S.lib.find(x=>x.name.toLowerCase()===t.name.toLowerCase());
+    if(hit){ if(t.ins) hit.ins=t.ins; if(t.loc) hit.loc=t.loc; }
+    else { S.lib.push({...t}); added++; }
+  }
+  return {added, dropped:0};
+}
 const $ = id => document.getElementById(id);
 
 /* ---------------------------------------------------------------- math */
@@ -1415,7 +1516,9 @@ $("libPick").onchange = e=>{
   }
   invalidate(); renderAll();
 };
-$("manageLib").onclick = ()=>{ renderLib(); $("libModal").hidden=false; $("libNewName").focus(); };
+$("manageLib").onclick = ()=>{ $("sheetUrl").value=S.sheet.url||""; $("sheetAuto").checked=!!S.sheet.auto;
+  if(S.sheet.url) sheetStat("Linked to a sheet. Sync replaces the list; Merge only adds what\u2019s new.");
+  renderLib(); $("libModal").hidden=false; $("libNewName").focus(); };
 $("libClose").onclick  = ()=>{ $("libModal").hidden=true; };
 $("libModal").addEventListener("click", e=>{ if(e.target.id==="libModal") $("libModal").hidden=true; });
 addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("libModal").hidden) $("libModal").hidden=true; });
@@ -1427,6 +1530,55 @@ $("libAdd").onclick = ()=>{
 };
 $("libNewLoc").addEventListener("keydown",e=>{ if(e.key==="Enter") $("libAdd").click(); });
 $("libNewName").addEventListener("keydown",e=>{ if(e.key==="Enter") $("libAdd").click(); });
+function sheetStat(msg, bad){
+  const el=$("sheetStat"); el.textContent=msg; el.style.color = bad? "var(--warn)" : "";
+}
+async function pullSheet(mode, quiet){
+  const url=sheetCsvUrl($("sheetUrl").value);
+  if(!url){ sheetStat("That doesn't look like a Google Sheet link.", true); return false; }
+  sheetStat("Fetching…");
+  let text;
+  try{
+    const r=await fetch(url, {redirect:"follow"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    text=await r.text();
+  }catch(e){
+    sheetStat(location.protocol==="file:"
+      ? "Can't reach Google when the planner is opened from a file. Open it from the website, or paste the CSV below."
+      : "Couldn't read that sheet — check it's shared with anyone-with-the-link, or use Publish to web → CSV. Failing that, paste the CSV below.", true);
+    return false;
+  }
+  if(/^\s*<(!doctype|html)/i.test(text)){
+    sheetStat("Google returned a sign-in page, so the sheet isn't public. Share it as anyone-with-the-link, or publish it as CSV.", true);
+    return false;
+  }
+  return loadCsvText(text, mode, quiet);
+}
+function loadCsvText(text, mode, quiet){
+  const list=rowsToTools(parseCsv(text));
+  if(!list.length){ sheetStat("No tools found — expected a Tool column with names in it.", true); return false; }
+  const before=S.lib.length;
+  const res=applySheetTools(list, mode);
+  S.sheet.url=$("sheetUrl").value.trim();
+  S.sheet.auto=$("sheetAuto").checked;
+  saveLib();
+  const when=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+  sheetStat(mode==="replace"
+    ? `${list.length} tool${list.length===1?"":"s"} loaded from the sheet at ${when} (replaced ${before}).`
+    : `${res.added} new tool${res.added===1?"":"s"} added at ${when}; existing entries updated.`);
+  return true;
+}
+$("sheetSync").onclick  = ()=>pullSheet("replace");
+$("sheetMerge").onclick = ()=>pullSheet("merge");
+$("sheetClear").onclick = ()=>{ S.sheet={url:"",auto:false}; $("sheetUrl").value=""; $("sheetAuto").checked=false;
+  saveLib(); sheetStat("Unlinked — the library is local to this browser again."); };
+$("sheetAuto").onchange = ()=>{ S.sheet.auto=$("sheetAuto").checked; S.sheet.url=$("sheetUrl").value.trim(); saveLib(); };
+$("csvLoad").onclick = ()=>{ const t=$("csvPaste").value.trim();
+  if(!t){ sheetStat("Nothing pasted yet.", true); return; }
+  if(loadCsvText(t.replace(/\t/g,","), "replace")) $("csvPaste").value=""; };
+$("csvFileBtn").onclick = ()=>$("csvFile").click();
+$("csvFile").onchange = e=>{ const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=()=>loadCsvText(String(r.result), "replace"); r.readAsText(f); e.target.value=""; };
 $("libFromLayout").onclick = ()=>{
   let added=0;
   for(const tl of S.tools){
@@ -1564,7 +1716,15 @@ function loadDemo(){
   if(po&&dr) S.rules=[{type:"opp", a:dr.id, b:po.id, n:1, tol:0}];
   runOptimize();
 }
-S.lib = lib.load() || DEFAULT_LIB.map(t=>({...t}));
+(function(){
+  const saved = lib.load();
+  S.lib   = saved ? saved.tools : DEFAULT_LIB.map(t=>({...t}));
+  S.sheet = saved ? saved.sheet : {url:"",auto:false};
+  if(S.sheet.url && S.sheet.auto){
+    setTimeout(()=>{ $("sheetUrl").value=S.sheet.url; $("sheetAuto").checked=true;
+      pullSheet("replace", true).then(ok=>{ if(ok) renderLib(); }); }, 0);
+  }
+})();
 initSeqDrag();
 loadDemo();
 </script>
