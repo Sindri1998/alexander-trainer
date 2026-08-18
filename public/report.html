@@ -83,18 +83,27 @@
   <div id="tools"></div>
   <div id="empty" class="note" hidden>No tools in this code. Scan the QR on a printed setup sheet.</div>
 
-  <details class="setupbox">
+  <details class="setupbox" id="setupbox">
     <summary style="cursor:pointer;font-size:13px;color:var(--text-2)">Where reports are sent</summary>
     <div style="margin-top:10px">
-      <label for="endpoint">Apps Script web-app URL</label>
-      <input type="text" id="endpoint" placeholder="https://script.google.com/macros/s/…/exec">
-      <div class="note">Saved on this phone. Ask whoever set up the sheet for this link, or open the
-        planner's Library panel where the same URL is listed.</div>
+      <div class="note" id="dest"></div>
       <div class="note" id="queued"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button id="retry">Send queued</button>
         <button id="dl">Download CSV</button>
       </div>
+      <details id="ovbox" style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">Send this phone somewhere else</summary>
+        <div style="margin-top:8px">
+          <label for="endpoint">Apps Script web-app URL</label>
+          <input type="text" id="endpoint" placeholder="https://script.google.com/macros/s/&hellip;/exec">
+          <div class="note">Changes this phone only &mdash; everyone else keeps going to the shop sheet.
+            Clear it to go back.</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="useDefault">Back to the shop sheet</button>
+          </div>
+        </div>
+      </details>
     </div>
   </details>
   <div class="note" id="stat"></div>
@@ -106,6 +115,27 @@
 
 <script>
 "use strict";
+
+/* ============================================================================
+ *  THE ONE LINE TO EDIT
+ *
+ *  Paste the Apps Script /exec URL between the quotes. Every phone that opens
+ *  this page then reports into that one spreadsheet — nothing to set up on the
+ *  phones themselves.
+ *
+ *  You get this URL from ToolReports.gs:
+ *    Extensions -> Apps Script -> paste ToolReports.gs -> Save
+ *    Deploy -> New deployment -> Web app
+ *      Execute as:     Me
+ *      Who has access: Anyone        <- required, the phones post anonymously
+ *    Copy the /exec URL it hands back, paste it below, re-upload this file.
+ *
+ *  Changing which spreadsheet the shop reports into = change this line and
+ *  re-upload report.html. No phone has to be touched.
+ * ========================================================================== */
+const SHOP_ENDPOINT = "https://script.google.com/macros/s/AKfycbzuDfDjZeuei3CTfsfccYxywUWO8Z2h8797_NYuLcjYMDcAZBOQKrpV4vys4BEMZh1G/exec";
+/* ========================================================================== */
+
 const $=id=>document.getElementById(id);
 const EP_KEY="ams-report-endpoint", Q_KEY="ams-report-queue", ME_KEY="ams-report-me";
 const store={
@@ -174,11 +204,38 @@ if(setup && setup.tools.length){
   $("jobM").textContent="Nothing scanned";
 }
 
+/* ---- where reports go ----
+   The shop endpoint is baked into this file, so a phone needs no setup. The
+   per-phone override exists only for testing or a second location; a blank
+   override means "use the shop sheet". */
+const override = ()=> String(store.get(EP_KEY,"")||"").trim();
+const endpoint = ()=> override() || SHOP_ENDPOINT;
+
+function showDest(){
+  const ov=override(), el=$("dest");
+  if(ov){
+    el.textContent="This phone is pointed at its own link, not the shop sheet.";
+    el.style.color="var(--warn)";
+    $("ovbox").open=true;
+  }else if(SHOP_ENDPOINT){
+    el.textContent="Reports go to the shop spreadsheet. Nothing to set up.";
+    el.style.color="";
+  }else{
+    el.textContent="No spreadsheet has been set up yet, so reports will be saved on this phone until one is. Whoever manages the site needs to fill in the link in report.html.";
+    el.style.color="var(--warn)";
+    $("ovbox").open=true;
+  }
+}
+
 /* ---- gather + send ---- */
 $("op").value = store.get(ME_KEY,"");
-$("endpoint").value = store.get(EP_KEY,"");
+$("endpoint").value = override();
 $("op").addEventListener("input",()=>store.set(ME_KEY,$("op").value));
-$("endpoint").addEventListener("input",()=>store.set(EP_KEY,$("endpoint").value.trim()));
+$("endpoint").addEventListener("input",()=>{ store.set(EP_KEY,$("endpoint").value.trim()); showDest(); });
+$("useDefault").onclick = ()=>{
+  store.set(EP_KEY,""); $("endpoint").value=""; showDest();
+  stat(SHOP_ENDPOINT? "Back to the shop spreadsheet." : "Override cleared.");
+};
 
 function collect(){
   const rows=[]; const stamp=new Date().toISOString();
@@ -199,7 +256,7 @@ function showQueue(){
   $("queued").textContent = n? `${n} report${n===1?"":"s"} waiting to send.` : "";
 }
 async function post(rows){
-  const url=store.get(EP_KEY,"");
+  const url=endpoint();
   if(!url) throw new Error("no endpoint");
   await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},
     body:JSON.stringify({rows})});
@@ -217,7 +274,9 @@ $("send").onclick = async ()=>{
       d.querySelector(".chev").textContent="tap to fill"; });
   }catch(e){
     const q=store.get(Q_KEY,[]); q.push(...rows); store.set(Q_KEY,q); showQueue();
-    stat("Saved on this phone — no connection or no link set. It'll send when you tap Send queued.", true);
+    stat(endpoint()
+      ? "No signal — saved on this phone. It'll go up when you're back in range; tap Send queued."
+      : "Saved on this phone. No spreadsheet is set up yet — see “Where reports are sent” below.", true);
   }
   $("send").disabled=false;
 };
@@ -241,6 +300,9 @@ $("dl").onclick = ()=>{
 };
 function stat(msg,bad){ const e=$("stat"); e.textContent=msg; e.className="note "+(bad?"err":"ok"); }
 showQueue();
+showDest();
+// nothing set up anywhere yet, and something is already waiting — say so up front
+if(!endpoint() && queueCount()) $("setupbox").open=true;
 </script>
 </body>
 </html>

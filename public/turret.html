@@ -599,6 +599,8 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
       <div class="row" style="margin-bottom:7px">
         <div><label for="sheetUrl">Sheet link</label>
           <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/&hellip;"></div>
+        <div style="flex:0 0 150px"><label for="sheetTab">Tab name</label>
+          <input type="text" id="sheetTab" placeholder="Tool Library"></div>
         <div style="flex:0 0 auto"><button id="sheetSync" class="primary">Sync</button></div>
         <div style="flex:0 0 auto"><button id="sheetMerge" title="Add new tools from the sheet, keep everything already here">Merge</button></div>
         <div style="flex:0 0 auto"><button id="sheetClear" title="Stop using a sheet">Unlink</button></div>
@@ -613,6 +615,9 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
         <div class="note">
           Columns: <b>Tool</b>, <b>Insert</b>, <b>Insert location</b> &mdash; a header row is detected by name, and
           without one the first three columns are used in that order.<br>
+          <b>Tab name</b> pins the pull to one tab. Fill it in whenever the spreadsheet holds anything
+          besides the library &mdash; tool reports, for instance &mdash; so other tabs can never be read
+          into the tool list. Blank means the first tab.<br>
           The sheet must be readable without signing in: <b>Share &rarr; Anyone with the link &rarr; Viewer</b>.
           If Sync reports it was blocked, use <b>File &rarr; Share &rarr; Publish to web</b>, choose the tab,
           pick <b>CSV</b>, and paste <i>that</i> link instead.<br>
@@ -811,7 +816,7 @@ const S = {
   nextTurret: 3,
   rules: [],       // clearance rules
   lib: [],         // tool library — name / insert / insert location
-  sheet: {url:"",auto:false},   // optional Google Sheet backing the library
+  sheet: {url:"",tab:"",auto:false,unlinked:false},   // Google Sheet backing the library
   job: "",         // part / op this setup is for
   reportBase: "", // where the QR points
   done: {},        // station -> ticked off during changeover
@@ -834,25 +839,53 @@ const DEFAULT_LIB = [
   {name:"TAP",             ins:"5/16 X 18",            loc:""},
 ];
 let libSaves = true;                       // false when the browser blocks storage
+// `unlinked` records a deliberate "leave me local" — without it, the baked-in
+// shop library would silently relink itself on the next reload.
+function blankSheet(){ return {url:"", tab:"", auto:false, unlinked:false}; }
 const lib = {
   load(){
     try{
       const v=localStorage.getItem(LIB_KEY); if(!v) return null;
       const d=JSON.parse(v);
-      if(Array.isArray(d)) return {tools:d, sheet:{url:"",auto:false}};   // legacy shape
-      return {tools:d.tools||[], sheet:d.sheet||{url:"",auto:false}};
+      if(Array.isArray(d)) return {tools:d, sheet:blankSheet()};          // legacy shape
+      return {tools:d.tools||[], sheet:Object.assign(blankSheet(), d.sheet||{})};
     }catch(_){ libSaves=false; return null; }
   },
-  save(){ try{ localStorage.setItem(LIB_KEY, JSON.stringify({v:2,tools:S.lib,sheet:S.sheet})); libSaves=true; }catch(_){ libSaves=false; } }
+  save(){ try{ localStorage.setItem(LIB_KEY, JSON.stringify({v:3,tools:S.lib,sheet:S.sheet})); libSaves=true; }catch(_){ libSaves=false; } }
 };
 
 /* --------------------------------------------- Google Sheet as the library */
+
+/* ============================================================================
+ *  SHOP TOOL LIBRARY — the other line to edit
+ *
+ *  Paste the link to the spreadsheet holding the tool library, and the name of
+ *  the tab it lives on. Every planner that opens this file then loads the same
+ *  library automatically — nobody has to paste a link into their own browser.
+ *
+ *  The sheet has to be readable without signing in:
+ *      Share -> General access -> Anyone with the link -> Viewer
+ *
+ *  SHOP_LIBRARY_TAB is the tab NAME, exactly as it appears on the tab at the
+ *  bottom of the spreadsheet. Naming it matters when the same spreadsheet also
+ *  collects tool reports: the name pins the pull to the library tab, so adding,
+ *  reordering or renaming other tabs can never feed report rows into the tool
+ *  list. Leave it blank only if the library is the very first tab.
+ * ========================================================================== */
+const SHOP_LIBRARY_SHEET = "https://docs.google.com/spreadsheets/d/13zb0-8_JobL1UBHJlAA2lLGZyAZ9fDS-tOWV9PBtRyc/edit";
+const SHOP_LIBRARY_TAB   = "Tool Library";
+/* ========================================================================== */
+
 // Accepts a normal sheet URL or a File > Share > Publish-to-web CSV URL.
-function sheetCsvUrl(raw){
+// `tab` is a sheet NAME and wins over any gid in the URL — it survives tabs
+// being added, moved or re-created, which a gid does not.
+function sheetCsvUrl(raw, tab){
   const u=String(raw||"").trim(); if(!u) return null;
   if(/output=csv/i.test(u)) return u;                       // already a CSV endpoint
   const id=(u.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)||[])[1];
   if(!id) return null;
+  const name=String(tab||"").trim();
+  if(name) return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
   const gid=(u.match(/[#&?]gid=([0-9]+)/)||[])[1] || "0";
   return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&gid=${gid}`;
 }
@@ -1727,8 +1760,13 @@ $("libPick").onchange = e=>{
   }
   invalidate(); renderAll();
 };
-$("manageLib").onclick = ()=>{ $("sheetUrl").value=S.sheet.url||""; $("sheetAuto").checked=!!S.sheet.auto;
-  if(S.sheet.url) sheetStat("Linked to a sheet. Sync replaces the list; Merge only adds what\u2019s new.");
+$("manageLib").onclick = ()=>{
+  $("sheetUrl").value=S.sheet.url||""; $("sheetTab").value=S.sheet.tab||"";
+  $("sheetAuto").checked=!!S.sheet.auto;
+  if(S.sheet.unlinked) sheetStat("This browser keeps its own library. Fill in a link and Sync to follow a sheet again.");
+  else if(S.sheet.url && S.sheet.url===SHOP_LIBRARY_SHEET)
+    sheetStat(`Following the shop library${S.sheet.tab? " (tab \u201c"+S.sheet.tab+"\u201d)" : ""}. Edit the sheet and everyone picks it up.`);
+  else if(S.sheet.url) sheetStat("Linked to a sheet. Sync replaces the list; Merge only adds what\u2019s new.");
   renderLib(); $("libModal").hidden=false; $("libNewName").focus(); };
 $("libClose").onclick  = ()=>{ $("libModal").hidden=true; };
 $("libModal").addEventListener("click", e=>{ if(e.target.id==="libModal") $("libModal").hidden=true; });
@@ -1745,7 +1783,7 @@ function sheetStat(msg, bad){
   const el=$("sheetStat"); el.textContent=msg; el.style.color = bad? "var(--warn)" : "";
 }
 async function pullSheet(mode, quiet){
-  const url=sheetCsvUrl($("sheetUrl").value);
+  const url=sheetCsvUrl($("sheetUrl").value, $("sheetTab").value);
   if(!url){ sheetStat("That doesn't look like a Google Sheet link.", true); return false; }
   sheetStat("Fetching…");
   let text;
@@ -1763,6 +1801,13 @@ async function pullSheet(mode, quiet){
     sheetStat("Google returned a sign-in page, so the sheet isn't public. Share it as anyone-with-the-link, or publish it as CSV.", true);
     return false;
   }
+  // gviz answers a bad tab name with a JS error envelope, not an HTTP error
+  if(/^\s*(\/\*O_o\*\/|google\.visualization)/.test(text) || /"status"\s*:\s*"error"/.test(text)){
+    const tab=$("sheetTab").value.trim();
+    sheetStat(tab? `The sheet has no tab called “${tab}” — check the spelling against the tab at the bottom of the spreadsheet.`
+                 : "Google rejected that request — try naming the tab in the Tab name box.", true);
+    return false;
+  }
   return loadCsvText(text, mode, quiet);
 }
 function loadCsvText(text, mode, quiet){
@@ -1771,7 +1816,9 @@ function loadCsvText(text, mode, quiet){
   const before=S.lib.length;
   const res=applySheetTools(list, mode);
   S.sheet.url=$("sheetUrl").value.trim();
+  S.sheet.tab=$("sheetTab").value.trim();
   S.sheet.auto=$("sheetAuto").checked;
+  S.sheet.unlinked=false;
   saveLib();
   const when=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
   sheetStat(mode==="replace"
@@ -1781,9 +1828,16 @@ function loadCsvText(text, mode, quiet){
 }
 $("sheetSync").onclick  = ()=>pullSheet("replace");
 $("sheetMerge").onclick = ()=>pullSheet("merge");
-$("sheetClear").onclick = ()=>{ S.sheet={url:"",auto:false}; $("sheetUrl").value=""; $("sheetAuto").checked=false;
-  saveLib(); sheetStat("Unlinked — the library is local to this browser again."); };
-$("sheetAuto").onchange = ()=>{ S.sheet.auto=$("sheetAuto").checked; S.sheet.url=$("sheetUrl").value.trim(); saveLib(); };
+$("sheetClear").onclick = ()=>{
+  S.sheet={url:"",tab:"",auto:false,unlinked:true};   // sticky, so the shop link doesn't come back on reload
+  $("sheetUrl").value=""; $("sheetTab").value=""; $("sheetAuto").checked=false;
+  saveLib();
+  sheetStat(SHOP_LIBRARY_SHEET
+    ? "Unlinked — this browser keeps its own library and will stop following the shop sheet. Sync with the link filled in to rejoin."
+    : "Unlinked — the library is local to this browser again.");
+};
+$("sheetAuto").onchange = ()=>{ S.sheet.auto=$("sheetAuto").checked; S.sheet.url=$("sheetUrl").value.trim();
+  S.sheet.tab=$("sheetTab").value.trim(); saveLib(); };
 $("csvLoad").onclick = ()=>{ const t=$("csvPaste").value.trim();
   if(!t){ sheetStat("Nothing pasted yet.", true); return; }
   if(loadCsvText(t.replace(/\t/g,","), "replace")) $("csvPaste").value=""; };
@@ -1931,10 +1985,21 @@ function loadDemo(){
 (function(){
   const saved = lib.load();
   S.lib   = saved ? saved.tools : DEFAULT_LIB.map(t=>({...t}));
-  S.sheet = saved ? saved.sheet : {url:"",auto:false};
+  S.sheet = saved ? saved.sheet : blankSheet();
+
+  // A baked-in shop library takes over unless this browser deliberately unlinked.
+  if(SHOP_LIBRARY_SHEET && !S.sheet.unlinked && !S.sheet.url){
+    S.sheet.url = SHOP_LIBRARY_SHEET;
+    S.sheet.tab = SHOP_LIBRARY_TAB;
+    S.sheet.auto = true;
+  }
   if(S.sheet.url && S.sheet.auto){
-    setTimeout(()=>{ $("sheetUrl").value=S.sheet.url; $("sheetAuto").checked=true;
-      pullSheet("replace", true).then(ok=>{ if(ok) renderLib(); }); }, 0);
+    setTimeout(()=>{
+      $("sheetUrl").value=S.sheet.url; $("sheetTab").value=S.sheet.tab||""; $("sheetAuto").checked=true;
+      // whatever was cached stays on screen if the pull fails, so an offline
+      // machine still opens with the last known library
+      pullSheet("replace", true).then(ok=>{ if(ok) renderLib(); });
+    }, 0);
   }
 })();
 initSeqDrag();

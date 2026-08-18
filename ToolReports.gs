@@ -1,29 +1,6 @@
-/**
- * Alexander Machine Shop — tool report collector
- *
- * 1. Open the Google Sheet you want reports in.
- * 2. Extensions → Apps Script, paste this over whatever's there, Save.
- * 3. Deploy → New deployment → type "Web app"
- *      Execute as:      Me
- *      Who has access:  Anyone            <- required; the phone posts anonymously
- * 4. Copy the /exec URL it gives you. That's what goes in the planner and the phone page.
- *
- * Re-deploy (Deploy → Manage deployments → edit → new version) after any edit,
- * or the old code keeps running.
- */
-
-var SHEET_NAME = 'Tool Reports';
-
-var COLS = ['ts','job','turret','machine','material','operator','station','tool',
-            'sfm','rpm','ipr','ipm','doc','woc','parts','mins','outcome','notes'];
-
-var HEADERS = ['Timestamp','Job / part','Turret','Machine','Material','Operator','Station','Tool',
-               'SFM','RPM','Feed IPR','Feed IPM','DOC','WOC','Parts per edge','Minutes in cut',
-               'Outcome','Notes'];
-
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(20000);                       // two phones submitting at once must not interleave
+  lock.waitLock(20000);
   try {
     var body = JSON.parse(e.postData.contents);
     var rows = body.rows || [];
@@ -45,16 +22,24 @@ function doPost(e) {
   }
 }
 
-// lets you sanity-check the deployment in a browser
 function doGet() {
   return out({ ok: true, sheet: SHEET_NAME, rows: Math.max(0, sheet().getLastRow() - 1) });
 }
+
+var SHEET_NAME = 'Tool Reports';
+
+var COLS = ['ts','job','turret','machine','material','operator','station','tool',
+            'sfm','rpm','ipr','ipm','doc','woc','parts','mins','outcome','notes'];
+
+var HEADERS = ['Timestamp','Job / part','Turret','Machine','Material','Operator','Station','Tool',
+               'SFM','RPM','Feed IPR','Feed IPM','DOC','WOC','Parts per edge','Minutes in cut',
+               'Outcome','Notes'];
 
 function sheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
-    sh = ss.insertSheet(SHEET_NAME);
+    sh = ss.insertSheet(SHEET_NAME, ss.getNumSheets());
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
       .setFontWeight('bold').setBackground('#004990').setFontColor('#ffffff');
     sh.setFrozenRows(1);
