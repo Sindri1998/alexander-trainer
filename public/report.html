@@ -145,15 +145,23 @@ const store={
 
 /* ---- read the setup out of the QR payload ---- */
 function parsePayload(){
-  const raw=decodeURIComponent((location.hash||"").replace(/^#/,""));
+  let raw=(location.hash||"").replace(/^#/,"");
   if(!raw) return null;
-  const p=raw.split("|");
-  if(p[0]!=="1") return null;
+  // format 2 needs no decoding; format 1 (older printed sheets) was encoded
+  const v2 = raw.charAt(0)==="2" && raw.charAt(1)==="*";
+  if(!v2){ try{ raw=decodeURIComponent(raw); }catch(_){ } }
+  const sep = v2 ? "*" : "|";
+  const p=raw.split(sep);
+  if(p[0]!=="1" && p[0]!=="2") return null;
+  const unplus = s => v2 ? s.replace(/\+/g," ") : s;
   const tools=(p[4]||"").split("~").filter(Boolean).map(x=>{
     const i=x.indexOf(":");
-    return {stn:+x.slice(0,i), name:x.slice(i+1)};
-  });
-  return {job:p[1]||"", turret:p[2]||"", stations:+p[3]||0, tools};
+    if(i<0) return null;
+    const stn=+x.slice(0,i);
+    if(!stn) return null;
+    return {stn, name:unplus(x.slice(i+1))};
+  }).filter(Boolean);
+  return {job:unplus(p[1]||""), turret:unplus(p[2]||""), stations:+p[3]||0, tools};
 }
 const setup=parsePayload();
 

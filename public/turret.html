@@ -334,7 +334,11 @@
     body.stn-many td.ins{font-size:9px;white-space:normal}
     body.split-list .half2{display:block}
     body.split-list .listwrap{gap:7mm}
-    #printHead{margin:0 0 10px;border-bottom:2px solid #004990;padding-bottom:6px;padding-right:44mm;position:relative}
+    /* padding-right tracks the QR box, which grows with the station count —
+       renderQR() sets --qr-w. Fixed 44mm used to clip the RAD MFG badge on
+       32-station sheets. */
+    #printHead{margin:0 0 10px;border-bottom:2px solid #004990;padding-bottom:6px;
+      padding-right:var(--qr-w,44mm);position:relative}
     #qrWrap{display:block;position:absolute;top:0;right:0;text-align:center;width:40mm}
     #qrWrap canvas{width:33mm;height:33mm;image-rendering:pixelated;display:block;margin:0 auto}
     #qrWrap .qrcap{font-size:7.5px;line-height:1.25;color:#333;margin-top:2px;letter-spacing:.02em}
@@ -638,166 +642,352 @@ Comment lines starting with ( ; % / N are ignored."></textarea>
 <div id="tip"></div>
 
 <script>
-/* ---- QR encoder (byte mode, ECC M) — verified against ISO/IEC 18004 ---- */
-// Minimal QR encoder — byte mode, versions 1..24, ECC L/M/Q. Returns a boolean matrix.
-(function(root){
-"use strict";
-const GF_EXP=new Uint8Array(512), GF_LOG=new Uint8Array(256);
-(function(){ let x=1; for(let i=0;i<255;i++){ GF_EXP[i]=x; GF_LOG[x]=i; x<<=1; if(x&0x100) x^=0x11d; }
-  for(let i=255;i<512;i++) GF_EXP[i]=GF_EXP[i-255]; })();
-const gmul=(a,b)=> (a===0||b===0)?0:GF_EXP[GF_LOG[a]+GF_LOG[b]];
+/* ---- QR encoder (byte mode, versions 1-40, ECC L/M/Q/H) ----
+   Replaced 2026-08-18: the previous encoder produced structurally invalid
+   symbols (format-info bits transposed, alignment patterns on the timing
+   row omitted). Nothing it generated was scannable. This one is validated
+   by decoding every symbol it produces. Do not "tidy" it without re-running
+   that check. */
+/* QR encoder — byte mode, versions 1-40, ECC L/M/Q/H.
+   Interface kept identical to the old one: QR.encode(text, ecc) -> {version, size, modules}
+   modules[row][col] truthy = dark. */
+var QR = (function () {
+  "use strict";
 
-function rsGenerator(n){ let g=[1];
-  for(let i=0;i<n;i++){ const ng=new Array(g.length+1).fill(0);
-    for(let j=0;j<g.length;j++){ ng[j]^=gmul(g[j],1); ng[j+1]^=gmul(g[j],GF_EXP[i]); }
-    g=ng; }
-  return g; }
-function rsEncode(data,n){ const g=rsGenerator(n), res=new Array(n).fill(0);
-  for(const b of data){ const f=b^res[0]; res.shift(); res.push(0);
-    if(f!==0) for(let i=0;i<n;i++) res[i]^=gmul(g[i+1],f); }
-  return res; }
+  // ---- per version+ECC: [ecPerBlock, blocksG1, dataG1, blocksG2, dataG2] ----
+  var RS = {
+    L: [[7,1,19,0,0],[10,1,34,0,0],[15,1,55,0,0],[20,1,80,0,0],[26,1,108,0,0],[18,2,68,0,0],
+        [20,2,78,0,0],[24,2,97,0,0],[30,2,116,0,0],[18,2,68,2,69],[20,4,81,0,0],[24,2,92,2,93],
+        [26,4,107,0,0],[30,3,115,1,116],[22,5,87,1,88],[24,5,98,1,99],[28,1,107,5,108],
+        [30,5,120,1,121],[28,3,113,4,114],[28,3,107,5,108],[28,4,116,4,117],[28,2,111,7,112],
+        [30,4,121,5,122],[30,6,117,4,118],[26,8,106,4,107],[28,10,114,2,115],[30,8,122,4,123],
+        [30,3,117,10,118],[30,7,116,7,117],[30,5,115,10,116],[30,13,115,3,116],[30,17,115,0,0],
+        [30,17,115,1,116],[30,13,115,6,116],[30,12,121,7,122],[30,6,121,14,122],[30,17,122,4,123],
+        [30,4,122,18,123],[30,20,117,4,118],[30,19,118,6,119]],
+    M: [[10,1,16,0,0],[16,1,28,0,0],[26,1,44,0,0],[18,2,32,0,0],[24,2,43,0,0],[16,4,27,0,0],
+        [18,4,31,0,0],[22,2,38,2,39],[22,3,36,2,37],[26,4,43,1,44],[30,1,50,4,51],[22,6,36,2,37],
+        [22,8,37,1,38],[24,4,40,5,41],[24,5,41,5,42],[28,7,45,3,46],[28,10,46,1,47],[26,9,43,4,44],
+        [26,3,44,11,45],[26,3,41,13,42],[26,17,42,0,0],[28,17,46,0,0],[28,4,47,14,48],
+        [28,6,45,14,46],[28,8,47,13,48],[28,19,46,4,47],[28,22,45,3,46],[28,3,45,23,46],
+        [28,21,45,7,46],[28,19,47,10,48],[28,2,46,29,47],[28,10,46,23,47],[28,14,46,21,47],
+        [28,14,46,23,47],[28,12,47,26,48],[28,6,47,34,48],[28,29,46,14,47],[28,13,46,32,47],
+        [28,40,47,7,48],[28,18,47,31,48]],
+    Q: [[13,1,13,0,0],[22,1,22,0,0],[18,2,17,0,0],[26,2,24,0,0],[18,2,15,2,16],[24,4,19,0,0],
+        [18,2,14,4,15],[22,4,18,2,19],[20,4,16,4,17],[24,6,19,2,20],[28,4,22,4,23],[26,4,20,6,21],
+        [24,8,20,4,21],[20,11,16,5,17],[30,5,24,7,25],[24,15,19,2,20],[28,1,22,15,23],
+        [28,17,22,1,23],[26,17,21,4,22],[30,15,24,5,25],[28,17,22,6,23],[30,7,24,16,25],
+        [30,11,24,14,25],[30,11,24,16,25],[30,7,24,22,25],[28,28,22,6,23],[30,8,23,26,24],
+        [30,4,24,31,25],[30,1,23,37,24],[30,15,24,25,25],[30,42,24,1,25],[30,10,24,35,25],
+        [30,29,24,19,25],[30,44,24,7,25],[30,39,24,14,25],[30,46,24,10,25],[30,49,24,10,25],
+        [30,48,24,14,25],[30,43,24,22,25],[30,34,24,34,25]],
+    H: [[17,1,9,0,0],[28,1,16,0,0],[22,2,13,0,0],[16,4,9,0,0],[22,2,11,2,12],[28,4,15,0,0],
+        [26,4,13,1,14],[26,4,14,2,15],[24,4,12,4,13],[28,6,15,2,16],[24,3,12,8,13],[28,7,14,4,15],
+        [22,12,11,4,12],[24,11,12,5,13],[24,11,12,7,13],[30,3,15,13,16],[28,2,14,17,15],
+        [28,2,14,19,15],[26,9,13,16,14],[28,15,15,10,16],[30,19,16,6,17],[24,34,13,0,0],
+        [30,16,15,14,16],[30,30,16,2,17],[30,22,15,13,16],[30,33,16,4,17],[30,12,15,28,16],
+        [30,11,15,31,16],[30,19,15,26,16],[30,23,15,25,16],[30,23,15,28,16],[30,19,15,35,16],
+        [30,11,15,46,16],[30,59,16,1,17],[30,22,15,41,16],[30,2,15,64,16],[30,24,15,46,16],
+        [30,42,15,32,16],[30,10,15,67,16],[30,20,15,61,16]]
+  };
 
-// [total codewords, ec per block, group1 blocks, group1 data cw, group2 blocks, group2 data cw]
-const RS={
- L:[[26,7,1,19,0,0],[44,10,1,34,0,0],[70,15,1,55,0,0],[100,20,1,80,0,0],[134,26,1,108,0,0],
-    [172,18,2,68,0,0],[196,20,2,78,0,0],[242,24,2,97,0,0],[292,30,2,116,0,0],[346,18,2,68,2,69],
-    [404,20,4,81,0,0],[466,24,2,92,2,93],[532,26,4,107,0,0],[581,30,3,115,1,116],[655,22,5,87,1,88],
-    [733,24,5,98,1,99],[815,28,1,107,5,108],[901,30,5,120,1,121],[991,28,3,113,4,114],[1085,28,3,107,5,108],
-    [1156,28,4,116,4,117],[1258,28,2,111,7,112],[1364,30,4,121,5,122],[1474,30,6,117,4,118]],
- M:[[26,10,1,16,0,0],[44,16,1,28,0,0],[70,26,1,44,0,0],[100,18,2,32,0,0],[134,24,2,43,0,0],
-    [172,16,4,27,0,0],[196,18,4,31,0,0],[242,22,2,38,2,39],[292,22,3,36,2,37],[346,26,4,43,1,44],
-    [404,30,1,50,4,51],[466,22,6,36,2,37],[532,22,8,37,1,38],[581,24,4,40,5,41],[655,24,5,41,5,42],
-    [733,28,7,45,3,46],[815,28,10,46,1,47],[901,26,9,43,4,44],[991,26,3,44,11,45],[1085,26,3,41,13,42],
-    [1156,26,17,42,0,0],[1258,28,17,46,0,0],[1364,28,4,47,14,48],[1474,28,6,45,14,46]],
- Q:[[26,13,1,13,0,0],[44,22,1,22,0,0],[70,18,2,17,0,0],[100,26,2,24,0,0],[134,18,2,15,2,16],
-    [172,24,4,19,0,0],[196,18,2,14,4,15],[242,22,4,18,2,19],[292,20,4,16,4,17],[346,24,6,19,2,20],
-    [404,28,4,22,4,23],[466,26,4,20,6,21],[532,24,8,20,4,21],[581,20,11,16,5,17],[655,30,5,24,7,25],
-    [733,24,15,19,2,20],[815,28,1,22,15,23],[901,28,17,22,1,23],[991,26,17,21,4,22],[1085,30,15,24,5,25],
-    [1156,28,17,22,6,23],[1258,30,7,24,16,25],[1364,30,11,24,14,25],[1474,30,3,24,16,25]]};
+  var ALIGN = [[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],
+    [6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],
+    [6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],
+    [6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],
+    [6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],
+    [6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],
+    [6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],
+    [6,30,58,86,114,142,170]];
 
-const ALIGN=[[],[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],
- [6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],
- [6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106]];
-
-function bch15_5(d){ let v=d<<10; for(let i=14;i>=10;i--) if(v>>i&1) v^=0x537<<(i-10); return ((d<<10)|v)^0x5412; }
-function bch18_6(d){ let v=d<<12; for(let i=17;i>=12;i--) if(v>>i&1) v^=0x1f25<<(i-12); return (d<<12)|v; }
-
-function encode(text, ecl){
-  ecl = ecl||"M";
-  const bytes = new TextEncoder().encode(text);
-  const tbl = RS[ecl];
-  let ver=-1;
-  for(let v=1;v<=tbl.length;v++){
-    const [tot,ecc,b1,d1,b2,d2]=tbl[v-1];
-    const cap=b1*d1+b2*d2;
-    const cci = v<10?8:16;
-    const need = Math.ceil((4+cci+bytes.length*8)/8);
-    if(need<=cap){ ver=v; break; }
+  function remainderBits(v){
+    if (v === 1) return 0;
+    if (v <= 6) return 7;
+    if (v <= 13) return 0;
+    if (v <= 20) return 3;
+    if (v <= 27) return 4;
+    if (v <= 34) return 3;
+    return 0;
   }
-  if(ver<0) throw new Error("payload too long for QR (max ~"+ (RS[ecl][RS[ecl].length-1][2]*RS[ecl][RS[ecl].length-1][3]) +" bytes)");
-  const [tot,eccLen,b1,d1,b2,d2]=tbl[ver-1];
-  const dataCw=b1*d1+b2*d2;
 
-  // --- bitstream
-  const bits=[];
-  const put=(val,len)=>{ for(let i=len-1;i>=0;i--) bits.push((val>>i)&1); };
-  put(4,4);
-  put(bytes.length, ver<10?8:16);
-  for(const b of bytes) put(b,8);
-  const capBits=dataCw*8;
-  for(let i=0;i<4 && bits.length<capBits;i++) bits.push(0);
-  while(bits.length%8) bits.push(0);
-  const pad=[0xEC,0x11]; let pi=0;
-  while(bits.length<capBits){ put(pad[pi++%2],8); }
-  const dcw=[]; for(let i=0;i<bits.length;i+=8){ let v=0; for(let j=0;j<8;j++) v=(v<<1)|bits[i+j]; dcw.push(v); }
+  // ---------------- GF(256), primitive 0x11D ----------------
+  var EXP = new Array(512), LOG = new Array(256);
+  (function () {
+    var x = 1;
+    for (var i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; }
+    for (var j = 255; j < 512; j++) EXP[j] = EXP[j - 255];
+  })();
+  function gmul(a, b) { return (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]]; }
 
-  // --- blocks + interleave
-  const blocks=[], eccs=[]; let p=0;
-  for(let i=0;i<b1;i++){ const b=dcw.slice(p,p+d1); p+=d1; blocks.push(b); eccs.push(rsEncode(b,eccLen)); }
-  for(let i=0;i<b2;i++){ const b=dcw.slice(p,p+d2); p+=d2; blocks.push(b); eccs.push(rsEncode(b,eccLen)); }
-  const maxD=Math.max(d1,d2||0), out=[];
-  for(let i=0;i<maxD;i++) for(const b of blocks) if(i<b.length) out.push(b[i]);
-  for(let i=0;i<eccLen;i++) for(const e of eccs) out.push(e[i]);
-
-  // --- matrix
-  const size=ver*4+17;
-  const m=Array.from({length:size},()=>new Array(size).fill(null));
-  const set=(r,c,v)=>{ m[r][c]=v; };
-  const finder=(r,c)=>{ for(let i=-1;i<=7;i++) for(let j=-1;j<=7;j++){
-      const rr=r+i, cc=c+j; if(rr<0||cc<0||rr>=size||cc>=size) continue;
-      const on = (i>=0&&i<=6&&(j===0||j===6)) || (j>=0&&j<=6&&(i===0||i===6)) || (i>=2&&i<=4&&j>=2&&j<=4);
-      set(rr,cc,on?1:0); } };
-  finder(0,0); finder(0,size-7); finder(size-7,0);
-  for(let i=8;i<size-8;i++){ const v=(i%2===0)?1:0; if(m[6][i]===null) set(6,i,v); if(m[i][6]===null) set(i,6,v); }
-  const ac=ALIGN[ver];
-  for(const r of ac) for(const c of ac){
-    if((r<=8&&c<=8)||(r<=8&&c>=size-9)||(r>=size-9&&c<=8)) continue;
-    for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++)
-      set(r+i,c+j, (Math.abs(i)===2||Math.abs(j)===2||(i===0&&j===0))?1:0); }
-  set(size-8,8,1);                                    // dark module
-  if(ver>=7){ const v=bch18_6(ver);
-    for(let i=0;i<18;i++){ const b=(v>>i)&1, r=Math.floor(i/3), c=i%3;
-      set(size-11+c, r, b); set(r, size-11+c, b); } }
-  // reserve format areas
-  const fmtCells=[];
-  for(let i=0;i<=8;i++){ if(i!==6) fmtCells.push([8,i]); }
-  for(let i=0;i<=8;i++){ if(i!==6&&i!==8) fmtCells.push([i,8]); }
-  for(let i=0;i<8;i++) fmtCells.push([size-1-i,8]);
-  for(let i=0;i<8;i++) fmtCells.push([8,size-1-i]);
-  const reserved=new Set(fmtCells.map(([r,c])=>r+","+c));
-  for(const [r,c] of fmtCells) if(m[r][c]===null) set(r,c,0);
-
-  // --- data placement
-  const free=(r,c)=> m[r][c]===null;
-  let bi=0, up=true;
-  const bitAt=i=> (i>>3)<out.length ? (out[i>>3]>>(7-(i&7)))&1 : 0;
-  for(let col=size-1;col>0;col-=2){
-    if(col===6) col--;
-    for(let k=0;k<size;k++){
-      const row = up? size-1-k : k;
-      for(const c of [col,col-1]) if(free(row,c)){ m[row][c]=bitAt(bi++)?1:0; m[row][c]|=2; }
+  function rsGenerator(n) {
+    var g = [1];
+    for (var i = 0; i < n; i++) {
+      var ng = new Array(g.length + 1).fill(0);
+      for (var j = 0; j < g.length; j++) {
+        ng[j] ^= g[j];
+        ng[j + 1] ^= gmul(g[j], EXP[i]);
+      }
+      g = ng;
     }
-    up=!up;
-  }
-  // mask bit 2 marks data modules
-  const isData=(r,c)=> (m[r][c]&2)===2;
-  const MASKS=[ (r,c)=>((r+c)%2===0), (r,c)=>(r%2===0), (r,c)=>(c%3===0), (r,c)=>((r+c)%3===0),
-    (r,c)=>((Math.floor(r/2)+Math.floor(c/3))%2===0), (r,c)=>(((r*c)%2)+((r*c)%3)===0),
-    (r,c)=>((((r*c)%2)+((r*c)%3))%2===0), (r,c)=>((((r+c)%2)+((r*c)%3))%2===0) ];
-
-  function applyMask(mi){
-    const g=m.map(row=>row.map(v=>v===null?0:(v&1)));
-    for(let r=0;r<size;r++) for(let c=0;c<size;c++) if(isData(r,c) && MASKS[mi](r,c)) g[r][c]^=1;
-    const fmt=bch15_5(({L:1,M:0,Q:3,H:2})[ecl]<<3 | mi);
-    for(let i=0;i<15;i++){
-      const b=(fmt>>i)&1;
-      if(i<6) g[8][i]=b; else if(i<8) g[8][i+1]=b; else if(i===8) g[7][8]=b; else g[14-i][8]=b;
-      if(i<8) g[size-1-i][8]=b; else g[8][size-15+i]=b;
-    }
-    g[size-8][8]=1;
     return g;
   }
-  function penalty(g){
-    let p=0;
-    for(let r=0;r<size;r++){ let run=1; for(let c=1;c<size;c++){ if(g[r][c]===g[r][c-1]) run++; else { if(run>=5)p+=3+(run-5); run=1; } } if(run>=5)p+=3+(run-5); }
-    for(let c=0;c<size;c++){ let run=1; for(let r=1;r<size;r++){ if(g[r][c]===g[r-1][c]) run++; else { if(run>=5)p+=3+(run-5); run=1; } } if(run>=5)p+=3+(run-5); }
-    for(let r=0;r<size-1;r++) for(let c=0;c<size-1;c++){ const v=g[r][c]; if(v===g[r][c+1]&&v===g[r+1][c]&&v===g[r+1][c+1]) p+=3; }
-    const pat=[1,0,1,1,1,0,1,0,0,0,0], pat2=[0,0,0,0,1,0,1,1,1,0,1];
-    const hit=(arr)=>{ let n=0;
-      for(let r=0;r<size;r++) for(let c=0;c<=size-11;c++){ let ok=true; for(let i=0;i<11;i++) if(g[r][c+i]!==arr[i]){ok=false;break;} if(ok)n++; }
-      for(let c=0;c<size;c++) for(let r=0;r<=size-11;r++){ let ok=true; for(let i=0;i<11;i++) if(g[r+i][c]!==arr[i]){ok=false;break;} if(ok)n++; }
-      return n; };
-    p+=40*(hit(pat)+hit(pat2));
-    let dark=0; for(let r=0;r<size;r++) for(let c=0;c<size;c++) dark+=g[r][c];
-    p+=10*Math.floor(Math.abs(dark*100/(size*size)-50)/5);
+  function rsRemainder(data, n) {
+    var g = rsGenerator(n), rem = new Array(n).fill(0);
+    for (var i = 0; i < data.length; i++) {
+      var factor = data[i] ^ rem[0];
+      rem.shift(); rem.push(0);
+      for (var j = 0; j < n; j++) rem[j] ^= gmul(g[j + 1], factor);
+    }
+    return rem;
+  }
+
+  // ---------------- bit buffer ----------------
+  function Bits() { this.bits = []; }
+  Bits.prototype.put = function (val, len) {
+    for (var i = len - 1; i >= 0; i--) this.bits.push((val >>> i) & 1);
+  };
+
+  function utf8(text) {
+    var out = [], s = unescape(encodeURIComponent(text));
+    for (var i = 0; i < s.length; i++) out.push(s.charCodeAt(i) & 0xff);
+    return out;
+  }
+
+  // ---------------- matrix ----------------
+  function reserve(size, v) {
+    var m = [], f = [];
+    for (var i = 0; i < size; i++) { m.push(new Array(size).fill(0)); f.push(new Array(size).fill(0)); }
+
+    function finder(r, c) {
+      for (var i = -1; i <= 7; i++) for (var j = -1; j <= 7; j++) {
+        var rr = r + i, cc = c + j;
+        if (rr < 0 || cc < 0 || rr >= size || cc >= size) continue;
+        var dark = (i >= 0 && i <= 6 && (j === 0 || j === 6)) ||
+                   (j >= 0 && j <= 6 && (i === 0 || i === 6)) ||
+                   (i >= 2 && i <= 4 && j >= 2 && j <= 4);
+        m[rr][cc] = dark ? 1 : 0; f[rr][cc] = 1;
+      }
+    }
+    finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+
+    // timing
+    for (var i2 = 8; i2 < size - 8; i2++) {
+      m[6][i2] = (i2 % 2 === 0) ? 1 : 0; f[6][i2] = 1;
+      m[i2][6] = (i2 % 2 === 0) ? 1 : 0; f[i2][6] = 1;
+    }
+
+    // alignment
+    var ap = ALIGN[v - 1], last = ap.length - 1;
+    for (var a = 0; a <= last; a++) for (var b = 0; b <= last; b++) {
+      // only the three that sit under a finder are omitted — the ones crossing
+      // the timing row/column are real and must still be drawn
+      if ((a === 0 && b === 0) || (a === 0 && b === last) || (a === last && b === 0)) continue;
+      var r0 = ap[a], c0 = ap[b];
+      for (var i3 = -2; i3 <= 2; i3++) for (var j3 = -2; j3 <= 2; j3++) {
+        var dark2 = Math.max(Math.abs(i3), Math.abs(j3)) !== 1;
+        m[r0 + i3][c0 + j3] = dark2 ? 1 : 0; f[r0 + i3][c0 + j3] = 1;
+      }
+    }
+
+    // format info areas (reserved) + dark module
+    for (var k = 0; k < 9; k++) {
+      if (!f[8][k]) { f[8][k] = 1; }
+      if (!f[k][8]) { f[k][8] = 1; }
+    }
+    for (var k2 = 0; k2 < 8; k2++) {
+      f[8][size - 1 - k2] = 1;
+      f[size - 1 - k2][8] = 1;
+    }
+    m[size - 8][8] = 1; f[size - 8][8] = 1;          // dark module
+
+    // version info (v >= 7)
+    if (v >= 7) {
+      for (var i4 = 0; i4 < 6; i4++) for (var j4 = 0; j4 < 3; j4++) {
+        f[i4][size - 11 + j4] = 1;
+        f[size - 11 + j4][i4] = 1;
+      }
+    }
+    return { m: m, f: f };
+  }
+
+  function placeData(m, f, size, bytes, remBits) {
+    var bits = [];
+    for (var i = 0; i < bytes.length; i++) for (var b = 7; b >= 0; b--) bits.push((bytes[i] >> b) & 1);
+    for (var r0 = 0; r0 < remBits; r0++) bits.push(0);
+
+    var idx = 0, up = true;
+    for (var col = size - 1; col > 0; col -= 2) {
+      if (col === 6) col--;                          // skip vertical timing column
+      for (var n = 0; n < size; n++) {
+        var row = up ? size - 1 - n : n;
+        for (var c = 0; c < 2; c++) {
+          var cc = col - c;
+          if (f[row][cc]) continue;
+          m[row][cc] = idx < bits.length ? bits[idx] : 0;
+          idx++;
+        }
+      }
+      up = !up;
+    }
+  }
+
+  var MASKS = [
+    function (i, j) { return (i + j) % 2 === 0; },
+    function (i) { return i % 2 === 0; },
+    function (i, j) { return j % 3 === 0; },
+    function (i, j) { return (i + j) % 3 === 0; },
+    function (i, j) { return (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0; },
+    function (i, j) { return ((i * j) % 2) + ((i * j) % 3) === 0; },
+    function (i, j) { return ((((i * j) % 2) + ((i * j) % 3)) % 2) === 0; },
+    function (i, j) { return ((((i + j) % 2) + ((i * j) % 3)) % 2) === 0; }
+  ];
+
+  var ECBITS = { L: 1, M: 0, Q: 3, H: 2 };
+
+  function formatBits(ecc, mask) {
+    var data = (ECBITS[ecc] << 3) | mask, rem = data;
+    for (var i = 0; i < 10; i++) rem = (rem << 1) ^ (((rem >>> 9) & 1) * 0x537);
+    return ((data << 10) | rem) ^ 0x5412;
+  }
+  function versionBits(v) {
+    var rem = v;
+    for (var i = 0; i < 12; i++) rem = (rem << 1) ^ (((rem >>> 11) & 1) * 0x1F25);
+    return (v << 12) | rem;
+  }
+
+  function applyFormat(m, size, ecc, mask) {
+    var bits = formatBits(ecc, mask);
+    for (var i = 0; i < 15; i++) {
+      var bit = (bits >>> i) & 1;
+      // copy 1 (around top-left): column 8 going down, then row 8 going left
+      if (i < 6) m[i][8] = bit;
+      else if (i === 6) m[7][8] = bit;
+      else if (i === 7) m[8][8] = bit;
+      else if (i === 8) m[8][7] = bit;
+      else m[8][14 - i] = bit;
+      // copy 2: row 8 at the right edge, then column 8 at the bottom edge
+      if (i < 8) m[8][size - 1 - i] = bit;
+      else m[size - 15 + i][8] = bit;
+    }
+  }
+  function applyVersion(m, size, v) {
+    if (v < 7) return;
+    var bits = versionBits(v);
+    for (var i = 0; i < 18; i++) {
+      var bit = (bits >>> i) & 1, r = Math.floor(i / 3), c = i % 3;
+      m[r][size - 11 + c] = bit;
+      m[size - 11 + c][r] = bit;
+    }
+  }
+
+  function penalty(m, size) {
+    var p = 0, i, j, k;
+    // rule 1: runs of 5+
+    for (i = 0; i < size; i++) {
+      var rc = 1, cc = 1;
+      for (j = 1; j < size; j++) {
+        if (m[i][j] === m[i][j - 1]) rc++; else { if (rc >= 5) p += 3 + (rc - 5); rc = 1; }
+        if (m[j][i] === m[j - 1][i]) cc++; else { if (cc >= 5) p += 3 + (cc - 5); cc = 1; }
+      }
+      if (rc >= 5) p += 3 + (rc - 5);
+      if (cc >= 5) p += 3 + (cc - 5);
+    }
+    // rule 2: 2x2 blocks
+    for (i = 0; i < size - 1; i++) for (j = 0; j < size - 1; j++) {
+      var s = m[i][j] + m[i][j + 1] + m[i + 1][j] + m[i + 1][j + 1];
+      if (s === 0 || s === 4) p += 3;
+    }
+    // rule 3: finder-like patterns
+    var pat1 = [1,0,1,1,1,0,1,0,0,0,0], pat2 = [0,0,0,0,1,0,1,1,1,0,1];
+    for (i = 0; i < size; i++) for (j = 0; j <= size - 11; j++) {
+      var okR1 = true, okR2 = true, okC1 = true, okC2 = true;
+      for (k = 0; k < 11; k++) {
+        if (m[i][j + k] !== pat1[k]) okR1 = false;
+        if (m[i][j + k] !== pat2[k]) okR2 = false;
+        if (m[j + k][i] !== pat1[k]) okC1 = false;
+        if (m[j + k][i] !== pat2[k]) okC2 = false;
+      }
+      if (okR1) p += 40; if (okR2) p += 40; if (okC1) p += 40; if (okC2) p += 40;
+    }
+    // rule 4: dark ratio
+    var dark = 0;
+    for (i = 0; i < size; i++) for (j = 0; j < size; j++) dark += m[i][j];
+    var pct = dark * 100 / (size * size);
+    p += Math.floor(Math.abs(pct - 50) / 5) * 10;
     return p;
   }
-  let best=null, bestP=Infinity;
-  for(let mi=0;mi<8;mi++){ const g=applyMask(mi), p=penalty(g); if(p<bestP){bestP=p;best=g;} }
-  return {size, modules:best, version:ver, ecl};
-}
-root.QR={encode};
-})(typeof window!=="undefined"?window:globalThis);
+
+  function encode(text, ecc) {
+    ecc = (ecc || "M").toUpperCase();
+    if (!RS[ecc]) throw new Error("bad ECC level: " + ecc);
+    var data = utf8(text), table = RS[ecc];
+
+    // smallest version that fits (char-count width changes at v10)
+    var v = 0, spec = null, dataCw = 0;
+    for (var t = 1; t <= 40; t++) {
+      var sp = table[t - 1];
+      var cw = sp[1] * sp[2] + sp[3] * sp[4];
+      var ccBits = t < 10 ? 8 : 16;
+      if (4 + ccBits + data.length * 8 <= cw * 8) { v = t; spec = sp; dataCw = cw; break; }
+    }
+    if (!v) throw new Error("data too long for a QR code (" + data.length + " bytes)");
+
+    var bb = new Bits();
+    bb.put(4, 4);
+    bb.put(data.length, v < 10 ? 8 : 16);
+    for (var i = 0; i < data.length; i++) bb.put(data[i], 8);
+    var cap = dataCw * 8;
+    var term = Math.min(4, cap - bb.bits.length);
+    bb.put(0, term);
+    while (bb.bits.length % 8 !== 0) bb.bits.push(0);
+    var cwArr = [];
+    for (var b = 0; b < bb.bits.length; b += 8) {
+      var byte = 0;
+      for (var q = 0; q < 8; q++) byte = (byte << 1) | bb.bits[b + q];
+      cwArr.push(byte);
+    }
+    var pads = [0xEC, 0x11], pi = 0;
+    while (cwArr.length < dataCw) { cwArr.push(pads[pi & 1]); pi++; }
+
+    // split into blocks, compute EC
+    var ecLen = spec[0], blocks = [], ecBlocks = [], pos = 0;
+    var groups = [[spec[1], spec[2]], [spec[3], spec[4]]];
+    for (var g = 0; g < 2; g++) {
+      for (var n = 0; n < groups[g][0]; n++) {
+        var blk = cwArr.slice(pos, pos + groups[g][1]);
+        pos += groups[g][1];
+        blocks.push(blk);
+        ecBlocks.push(rsRemainder(blk, ecLen));
+      }
+    }
+    // interleave
+    var out = [], maxLen = 0;
+    for (var x = 0; x < blocks.length; x++) maxLen = Math.max(maxLen, blocks[x].length);
+    for (var c2 = 0; c2 < maxLen; c2++)
+      for (var y = 0; y < blocks.length; y++)
+        if (c2 < blocks[y].length) out.push(blocks[y][c2]);
+    for (var c3 = 0; c3 < ecLen; c3++)
+      for (var z = 0; z < ecBlocks.length; z++) out.push(ecBlocks[z][c3]);
+
+    var size = v * 4 + 17;
+    var best = null, bestScore = Infinity;
+    for (var mask = 0; mask < 8; mask++) {
+      var res = reserve(size, v);
+      placeData(res.m, res.f, size, out, remainderBits(v));
+      // mask only the data region
+      for (var r = 0; r < size; r++) for (var cx = 0; cx < size; cx++)
+        if (!res.f[r][cx] && MASKS[mask](r, cx)) res.m[r][cx] ^= 1;
+      applyVersion(res.m, size, v);
+      applyFormat(res.m, size, ecc, mask);
+      var sc = penalty(res.m, size);
+      if (sc < bestScore) { bestScore = sc; best = res.m; }
+    }
+    return { version: v, size: size, modules: best };
+  }
+
+  return { encode: encode };
+})();
+
+if (typeof module !== "undefined" && module.exports) module.exports = QR;
 
 </script>
 <script>
@@ -1608,16 +1798,35 @@ function renderDiagram(){
   });
 }
 
-// what the setup-sheet QR carries: everything the report page needs, no lookup
+/* what the setup-sheet QR carries: everything the report page needs, no lookup.
+
+   Format 2 is built from characters that survive a URL fragment untouched, so
+   nothing gets percent-encoded. That matters: the old format put "|", ":" and
+   every space through encodeURIComponent, which tripled their cost and pushed
+   a 12-station sheet to a 69-module symbol. Fewer modules = fatter printed
+   modules = a code a phone can actually read.
+
+     2*JOB*TURRET*STATIONS*1:OD+ROUGH~5:GUN+DRILL~12:PART+OFF
+
+   Spaces become "+". Field/station/tool separators are * ~ : and pk() strips
+   them out of names so they can never appear inside a field. */
+const NAME_MAX = 22;                       // long names cost modules, not clarity
+function pk(s, max){
+  let out = String(s == null ? "" : s)
+    .replace(/\s+/g, " ").trim()
+    .replace(/[^A-Za-z0-9 ./\-_,()&']/g, "");   // drops * ~ : | % # + and anything exotic
+  if (max && out.length > max) out = out.slice(0, max).trim();
+  return out.replace(/ /g, "+");
+}
 function setupPayload(){
   const t=T(), at={};
   for(const [id,p] of Object.entries(S.layout)) at[p]=+id;
   const rows=[];
   for(let i=0;i<t.stations;i++){
     const tl = at[i]!==undefined? toolById(at[i]) : null;
-    if(tl) rows.push((i+1)+":"+tl.name.replace(/[|~:]/g," "));
+    if(tl) rows.push((i+1)+":"+pk(tl.name, NAME_MAX));
   }
-  return ["1", (S.job||"").replace(/[|~]/g," "), t.name.replace(/[|~]/g," "), t.stations, rows.join("~")].join("|");
+  return ["2", pk(S.job,28), pk(t.name,20), t.stations, rows.join("~")].join("*");
 }
 function reportUrl(){
   let base=(S.reportBase||"").trim();
@@ -1625,19 +1834,34 @@ function reportUrl(){
     base = location.protocol==="file:" ? "https://alexandersmachineshoptraining.com/report.html"
          : location.origin + location.pathname.replace(/[^/]*$/, "report.html");
   }
-  return base + "#" + encodeURIComponent(setupPayload());
+  return base + "#" + setupPayload();       // already fragment-safe; do NOT re-encode
 }
 function renderQR(){
   const cv=$("qrCanvas"); if(!cv) return;
+  const wrap=$("qrWrap");
   try{
-    const q=QR.encode(reportUrl(),"M");
+    const url=reportUrl();
+    // ECC M normally; drop to L only if that is what keeps the symbol printable
+    let q=QR.encode(url,"M");
+    if(q.version>14){ const l=QR.encode(url,"L"); if(l.version<q.version) q=l; }
+
     const s=4, quiet=4, dim=(q.size+quiet*2)*s;
     cv.width=dim; cv.height=dim;
     const x=cv.getContext("2d");
     x.fillStyle="#fff"; x.fillRect(0,0,dim,dim); x.fillStyle="#000";
     for(let r=0;r<q.size;r++) for(let c=0;c<q.size;c++)
       if(q.modules[r][c]) x.fillRect((c+quiet)*s,(r+quiet)*s,s,s);
+
+    // Print it big enough that one module stays >= ~0.55mm. Below about 0.4mm
+    // phone cameras start failing on ordinary office paper, which is what the
+    // old fixed 33mm box was doing to anything past a handful of stations.
+    const mm=Math.min(58, Math.max(33, Math.ceil((q.size+quiet*2)*0.55)));
+    cv.style.width=cv.style.height=mm+"mm";
+    if(wrap) wrap.style.width=(mm+7)+"mm";
+    document.documentElement.style.setProperty("--qr-w",(mm+11)+"mm");
     cv.dataset.version=q.version;
+    cv.dataset.mm=mm;
+    cv.dataset.modmm=(mm/(q.size+quiet*2)).toFixed(3);
   }catch(e){ cv.width=cv.height=1; cv.dataset.version="err"; }
 }
 
