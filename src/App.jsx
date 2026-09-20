@@ -5,6 +5,7 @@ import Simulator from './Simulator.jsx'
 import CourseTest from './CourseTest.jsx'
 import Leaderboard, { saveTrainerScore, saveTestScore } from './Leaderboard.jsx'
 import TurretPlanner from './TurretPlanner.jsx'
+import ScenarioTraining from './ScenarioTraining.jsx'
 import { useAuth, LoginScreen } from './Auth.jsx'
 
 export default function App() {
@@ -60,6 +61,7 @@ export default function App() {
           {navLink('/',           '🎮 Trainer')}
           {navLink('/gcodesim',  '⚙️ Simulator')}
           {navLink('/test',      '📋 Test')}
+          {navLink('/scenarios', '🧠 Scenarios')}
           {navLink('/leaderboard','🏆 Leaderboard')}
           {navLink('/turret',     '🔧 Turret')}
         </div>
@@ -98,6 +100,7 @@ export default function App() {
           <Route path="/"            element={<Trainer     dark={dark} setDark={setDark} user={user} onScore={handleTrainerScore} />} />
           <Route path="/gcodesim"   element={<Simulator   dark={dark} setDark={setDark} user={user} />} />
           <Route path="/test"        element={<CourseTest  dark={dark} user={user} onScoreSubmit={handleTestScore} />} />
+          <Route path="/scenarios"   element={<ScenarioTraining dark={dark} user={user} />} />
           <Route path="/leaderboard" element={<Leaderboard dark={dark} user={user} />} />
           <Route path="/turret"      element={<TurretPlanner dark={dark} />} />
         </Routes>
