@@ -1,6 +1,6 @@
 // ============================================================================
 //  SCENARIO TRAINING — CONTENT FILE
-//  Alexander Machine Shop · General machining theory & shop troubleshooting
+//  Alexander's Machine Shop · General machining theory & shop troubleshooting
 // ============================================================================
 //
 //  This file is DATA ONLY. No component logic lives here. You can add, edit,

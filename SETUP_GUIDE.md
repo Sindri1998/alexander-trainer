@@ -1,4 +1,4 @@
-# Alexander Machine Shop — G-Code Trainer
+# Alexander's Machine Shop — G-Code Trainer
 ## Setup Guide: From Laptop to Live Website
 
 ---
@@ -195,4 +195,4 @@ If you want `trainer.alexandermachineshop.com`:
 
 ---
 
-*Alexander Machine Shop · RAD MFG · PUMA DNT2600M G-Code Trainer*
+*Alexander's Machine Shop · RAD MFG · PUMA DNT2600M G-Code Trainer*

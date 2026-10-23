@@ -419,7 +419,7 @@ function makeUI(T, dark) {
   const Brand = ({ sub }) => (
     <div style={{ textAlign: 'center', marginBottom: 18 }}>
       <div style={{ display: 'inline-block', background: '#004990', borderRadius: 8, padding: '10px 28px', marginBottom: 10, boxShadow: '0 2px 8px #00000033' }}>
-        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '0.06em', color: '#c8d8e8' }}>Alexander Machine Shop</div>
+        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '0.06em', color: '#c8d8e8' }}>Alexander's Machine Shop</div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ background: '#ef4444', color: '#fff', fontWeight: 900, fontSize: 11, letterSpacing: '0.06em', padding: '2px 7px 2px 8px', borderRadius: '4px 0 0 4px', lineHeight: 1 }}>RAD</div>

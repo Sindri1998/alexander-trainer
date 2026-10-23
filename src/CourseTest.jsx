@@ -413,7 +413,7 @@ export default function CourseTest({ dark, user, onScoreSubmit }) {
           <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: T.acc, marginBottom: 4 }}>PUMA DNT2600M</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 6 }}>G-Code Certification Test</div>
-          <div style={{ fontSize: 11, color: T.mut }}>Alexander Machine Shop · Fanuc 0i-TF · Live Tooling</div>
+          <div style={{ fontSize: 11, color: T.mut }}>Alexander's Machine Shop · Fanuc 0i-TF · Live Tooling</div>
         </div>
 
         {/* Test overview */}

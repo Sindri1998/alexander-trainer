@@ -69,7 +69,7 @@ export function LoginScreen({ onLogin, dark }) {
             marginBottom: 12,
           }}>
             <div style={{ color: '#c8d8e8', fontWeight: 800, fontSize: 16, letterSpacing: '0.04em' }}>
-              Alexander Machine Shop
+              Alexander's Machine Shop
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 0, marginBottom: 14 }}>

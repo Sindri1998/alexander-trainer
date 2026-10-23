@@ -54,7 +54,7 @@ export default function App() {
         flexShrink: 0,
       }}>
         <span style={{ color: '#c8d8e8', fontWeight: 800, fontSize: 13, fontFamily: 'monospace', letterSpacing: '0.04em', marginRight: 4, whiteSpace: 'nowrap' }}>
-          Alexander Machine Shop
+          Alexander's Machine Shop
         </span>
 
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

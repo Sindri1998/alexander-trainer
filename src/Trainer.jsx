@@ -961,7 +961,7 @@ function TeachScreen({ onBack, dark, setDark }) {
               borderRadius:"5px",
               padding:"4px 12px",
             }}>
-              <div style={{fontSize:11,fontWeight:800,letterSpacing:"0.05em",color:"#c8d8e8",fontFamily:"monospace"}}>Alexander Machine Shop</div>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing:"0.05em",color:"#c8d8e8",fontFamily:"monospace"}}>Alexander's Machine Shop</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
               <span style={{background:"#ef4444",color:"#fff",fontWeight:900,fontSize:9,padding:"1px 5px",borderRadius:3}}>RAD</span>
@@ -1163,7 +1163,7 @@ export default function Trainer({ dark: darkProp = false, setDark: setDarkProp, 
                 color:"#c8d8e8",
                 fontFamily:"monospace",
                 textShadow:"0 1px 2px #00000044",
-              }}>Alexander Machine Shop</div>
+              }}>Alexander's Machine Shop</div>
             </div>
           <div style={{display:"inline-flex",alignItems:"center",gap:0,marginBottom:10}}>
             <div style={{background:"#ef4444",color:"#fff",fontFamily:"monospace",fontWeight:900,fontSize:11,letterSpacing:"0.06em",padding:"2px 7px 2px 8px",borderRadius:"4px 0 0 4px",lineHeight:1}}>RAD</div>
@@ -1304,7 +1304,7 @@ export default function Trainer({ dark: darkProp = false, setDark: setDarkProp, 
           </div>
 
           <div style={{fontSize:8,letterSpacing:"0.2em",textTransform:"uppercase",color:mut,marginBottom:7}}>
-            Alexander Machine Shop · DNT2600M · {MODES.find(m=>m.id===mode)?.label}
+            Alexander's Machine Shop · DNT2600M · {MODES.find(m=>m.id===mode)?.label}
           </div>
 
           <div style={{background:sur,border:`1px solid ${bdr}`,borderRadius:10,padding:"16px",marginBottom:10,textAlign:"center"}}>

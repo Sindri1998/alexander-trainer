@@ -167,7 +167,7 @@ export default function Leaderboard({ dark, user }) {
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: 28, marginBottom: 4 }}>🏆</div>
           <div style={{ fontSize: 16, fontWeight: 800, color: T.acc }}>Leaderboard</div>
-          <div style={{ fontSize: 10, color: T.mut, marginTop: 2 }}>Alexander Machine Shop · PUMA DNT2600M Training</div>
+          <div style={{ fontSize: 10, color: T.mut, marginTop: 2 }}>Alexander's Machine Shop · PUMA DNT2600M Training</div>
         </div>
 
         {/* My stats card */}

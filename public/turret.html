@@ -14,7 +14,7 @@
     --text-primary:#10171d;
     --text-secondary:#4a5760;
     --text-muted:#78858f;
-    --brand:#004990;           /* Alexander Machine Shop blue */
+    --brand:#004990;           /* Alexander's Machine Shop blue */
     --brand-deep:#00376d;
     --brand-ink:#ffffff;
     --accent:#004990;
@@ -366,7 +366,7 @@
 <header>
   <div class="brandbar">
     <div class="wordmark">
-      <span class="co">Alexander Machine Shop</span>
+      <span class="co">Alexander's Machine Shop</span>
       <span class="tool">Turret Layout Planner</span>
     </div>
     <span class="radbadge"><span class="r">RAD</span><span class="m">MFG</span></span>
@@ -1869,7 +1869,7 @@ function renderPrintHead(){
   const t=T(), s=cleanSeq();
   const rep=ruleReport(S.layout).filter(x=>!x.broken);
   $("printHead").innerHTML =
-    `<div class="ph-top"><span class="ph-co">Alexander Machine Shop</span>
+    `<div class="ph-top"><span class="ph-co">Alexander's Machine Shop</span>
        <span class="ph-rad">RAD MFG</span></div>
      <div class="ph-title">Turret Setup Sheet &mdash; ${esc(t.name)}</div>
      <div class="ph-meta">${t.stations} stations &middot; ${new Set(s).size} tools &middot; ${t.model==="bi"?"bi-directional":"uni-directional"} indexing${rep.length?" &middot; "+rep.length+" clearance rule"+(rep.length>1?"s":"")+" met":""}</div>
