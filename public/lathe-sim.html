@@ -82,6 +82,7 @@ td input{width:66px;text-align:right;padding:2px 4px}
 .log .cond,.log .goto,.log .loop{color:var(--accent2)}
 .log .call{color:var(--thread);border-left-color:var(--thread)}
 .log .spindle{color:var(--warn)}
+#tools{overflow-x:auto}#tools table{width:max-content;min-width:100%}#tools table input:not([style]){width:50px;padding:3px 4px}#tools table select{font-size:11px;padding:2px}#tools table th{white-space:nowrap;position:static}
 .log .cycle{color:var(--feed)}
 .log .comp{color:var(--comp)}
 .log .stop{color:var(--warn);font-weight:700}
@@ -200,7 +201,10 @@ html.embed #testPanel{inset:20px 4% 20px}
       <label style="font-size:10px;color:var(--muted)" id="showPathWrap" title="Show or hide the drawn tool paths (rapid, feed, thread)"><input type="checkbox" id="showPath" checked> toolpath</label>
       <label style="font-size:10px;color:var(--muted)"><input type="checkbox" id="showProg" checked> programmed</label>
       <label style="font-size:10px;color:var(--muted)" id="showStockWrap"><input type="checkbox" id="showStock" checked> stock</label>
-      <label style="font-size:10px;color:var(--muted)" id="cutAwayWrap" title="3D: how the part is cut open so holes and bores show">cut <select id="cutAway" style="font-size:10px;padding:1px 3px"><option value="half" selected>half section</option><option value="notch">quarter notch</option><option value="off">solid</option></select></label>
+      <label style="font-size:10px;color:var(--muted)" id="chipsWrap" title="Chips fly off the tool while the cut plays back"><input type="checkbox" id="chipsOn" checked> chips</label>
+      <label style="font-size:10px;color:var(--muted)" id="chuckWrap" title="Show the 3-jaw chuck holding the stock"><input type="checkbox" id="chuckOn" checked> chuck</label>
+      <label style="font-size:10px;color:var(--muted)" id="autoIsoWrap" title="When a run finishes, open the isometric quarter-section view and play the cut automatically"><input type="checkbox" id="autoIso" checked> auto ▶ iso ¼</label>
+      <label style="font-size:10px;color:var(--muted)" id="cutAwayWrap" title="3D: how the part is cut open so holes and bores show">cut <select id="cutAway" style="font-size:10px;padding:1px 3px"><option value="half" selected>half section</option><option value="quarter">¼ section</option><option value="notch">quarter notch</option><option value="off">solid</option></select></label>
       <button class="ghost" id="cutSecBtn" title="Look straight at the cut face (flat section view)" style="min-height:22px;padding:2px 7px;font-size:10px">⊡ section view</button>
       <label style="font-size:10px;color:var(--text);font-weight:700" id="cutViewWrap" title="Show the stock being cut away as the tool moves"><input type="checkbox" id="cutView"> ✂ material removal</label>
     </h3>
@@ -215,7 +219,7 @@ html.embed #testPanel{inset:20px 4% 20px}
       <span id="cutTime" style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:92px;text-align:right">0.0 / 0.0 s</span>
     </div>
     <div class="row" id="stockRow" style="padding:4px 8px;border-top:1px solid var(--border)">
-      <label>Stock Ø</label><input class="n" id="stkD" value="2.5"><label>Len</label><input class="n" id="stkL" value="3.0"><label>Bore</label><input class="n" id="stkB" value="0"><label>Face at Z</label><input class="n" id="stkZ" value="0">
+      <label>Stock Ø</label><input class="n" id="stkD" value="2.5"><label>Len</label><input class="n" id="stkL" value="3.0"><label>Bore</label><input class="n" id="stkB" value="0"><label>Face at Z</label><input class="n" id="stkZ" value="0"><label title="Chuck outside diameter">Chuck Ø</label><input class="n" id="chkD" value="8"><label title="How far the jaws grip the stock">Grip</label><input class="n" id="chkG" value="1">
     </div>
   </div>
   <div class="pane right" id="right">
@@ -1059,7 +1063,7 @@ Interpreter.prototype.output = function (seg, cfrom, cto) {
   var rpm;
   if (this.rotaryOn) { rpm = this.rotaryRpm; }
   else { var rpm0 = this.rpmAtX(seg.from.x), rpm1 = this.rpmAtX(seg.to.x); rpm = (isFinite(rpm0) ? rpm0 : rpm1) * 0.5 + (isFinite(rpm1) ? rpm1 : rpm0) * 0.5; }
-  seg.rpm = rpm; var len;
+  seg.rpm = rpm; seg.spOn = this.spindleOn; var len;
   if (seg.arc) len = arcSweep(V(seg.from.z, seg.from.x), V(seg.to.z, seg.to.x), V(seg.arc.cz, seg.arc.cx), seg.arc.cw) * seg.arc.r;
   else len = Math.hypot(seg.to.z - seg.from.z, seg.to.x - seg.from.x);
   seg.length = len;
@@ -3052,7 +3056,7 @@ function renderToolsMill() {
   var h = ['<table><tr><th>T</th><th>Length (H)</th><th>Radius (D)</th><th>Label</th></tr>'];
   for (var i = 1; i <= 20; i++) {
     var t = millToolOfs[i] || { len: 0, rad: 0 };
-    h.push('<tr><td>' + pad2(i) + '</td><td><input data-t="' + i + '" data-k="len" value="' + t.len + '"></td><td><input data-t="' + i + '" data-k="rad" value="' + t.rad + '"></td><td><input data-t="' + i + '" data-k="label" value="' + (t.label || '') + '" style="width:110px;text-align:left"></td></tr>');
+    h.push('<tr><td>' + pad2(i) + '</td><td><input data-t="' + i + '" data-k="len" value="' + t.len + '"></td><td><input data-t="' + i + '" data-k="rad" value="' + t.rad + '"></td><td><input data-t="' + i + '" data-k="label" value="' + (t.label || '') + '" style="width:84px;text-align:left"></td></tr>');
   }
   h.push('</table>'); $('tools').innerHTML = h.join('');
   $('tools').querySelectorAll('input').forEach(function (inp) {
@@ -3207,7 +3211,7 @@ function applyMachineMode(doSwitch) {
   $('machInfoMill').style.display = isMill ? '' : 'none';
   $('legendLathe').style.display = isMill ? 'none' : '';
   $('legendMill').style.display = isMill ? '' : 'none';
-  $('stockRow').style.display = isMill ? 'none' : ''; $('cutViewWrap').style.display = isMill ? 'none' : ''; $('showPathWrap').style.display = isMill ? 'none' : ''; $('cutAwayWrap').style.display = isMill ? 'none' : ''; $('cutSecBtn').style.display = isMill ? 'none' : ''; if (isMill) { $('cutView').checked = false; $('cutBar').hidden = true; }  $('showStockWrap').style.display = isMill ? 'none' : '';
+  $('stockRow').style.display = isMill ? 'none' : ''; $('cutViewWrap').style.display = isMill ? 'none' : ''; $('showPathWrap').style.display = isMill ? 'none' : ''; $('cutAwayWrap').style.display = isMill ? 'none' : ''; $('chipsWrap').style.display = isMill ? 'none' : ''; $('chuckWrap').style.display = isMill ? 'none' : ''; $('autoIsoWrap').style.display = isMill ? 'none' : ''; $('cutSecBtn').style.display = isMill ? 'none' : ''; if (isMill) { $('cutView').checked = false; $('cutBar').hidden = true; }  $('showStockWrap').style.display = isMill ? 'none' : '';
   $('optStop').parentElement.style.display = isMill ? 'none' : ''; $('optClear100').parentElement.style.display = isMill ? 'none' : '';
   $('toolpathHdr').childNodes[0].textContent = isMill ? 'Toolpath (XYZ) ' : 'Toolpath ';
   populateSamplesFor(machine);
@@ -3253,14 +3257,15 @@ CUT.poly = function (s) {
 };
 /* Apply a tool-tip polyline to a radial profile: outer[z] (OD) and inner[z] (bore).
    A sample belongs to the OD if it is nearer the outer wall than the bore. */
-function toolKind(tl) { if (!tl) return 'turn'; return tl.kind || (/drill/i.test(tl.label || '') ? 'drill' : 'turn'); }
+function toolKind(tl) { if (!tl) return 'turn'; return tl.kind || (/drill/i.test(tl.label || '') ? 'drill' : /groov/i.test(tl.label || '') ? 'groove' : 'turn'); }
+function toolGroove(tl) { return { w: tl && tl.gw > 0 ? tl.gw : 0.125, ref: tl && tl.gref ? tl.gref : 'left' }; }
 function toolDia(tl) {
   if (!tl) return 0; if (tl.dia > 0) return tl.dia;
   var m = /(\d*\.\d+)/.exec(tl.label || ''); if (m) return parseFloat(m[1]);
   m = /(\d+)\s*\/\s*(\d+)/.exec(tl.label || ''); return m ? parseFloat(m[1]) / parseFloat(m[2]) : 0;
 }
 function cutToolFor(s) { var o = (s.tool || 0) % 100 || Math.floor((s.tool || 0) / 100); return tools[o]; }
-CUT.toolsKey = function () { var k = []; for (var i = 1; i <= 12; i++) k.push(toolKind(tools[i]) + toolDia(tools[i])); return k.join(','); };
+CUT.toolsKey = function () { var k = []; for (var i = 1; i <= 12; i++) k.push(toolKind(tools[i]) + toolDia(tools[i]) + (toolKind(tools[i]) === 'groove' ? ':' + toolGroove(tools[i]).w + toolGroove(tools[i]).ref : '')); return k.join(','); };
 /* Drill: removes a full-diameter hole (118 deg point) along the tip path. The tip leads; full diameter is reached
    D/2 / tan(59 deg) behind it. Only counts while the tip is on the spindle centerline. */
 CUT.drill = function (pts, outer, inner, D) {
@@ -3274,8 +3279,21 @@ CUT.drill = function (pts, outer, inner, D) {
     }
   }
 };
+/* Groove / parting blade: the insert has a real width. Its reference corner (left = chuck side, right, or center) sits at the programmed
+   Z, and the whole edge cuts to the programmed X, so a plunge makes a slot exactly that wide. */
+CUT.groove = function (pts, outer, inner, w, ref) {
+  var N = CUT.N, span = CUT.z1 - CUT.z0, a = ref === 'right' ? -w : ref === 'center' ? -w / 2 : 0;
+  for (var p = 0; p < pts.length; p++) {
+    var q = pts[p], x = Math.max(0, q.x), i0 = Math.ceil((q.z + a - CUT.z0) / span * (N - 1) - 1e-9), i1 = Math.floor((q.z + a + w - CUT.z0) / span * (N - 1) + 1e-9);
+    for (var i = Math.max(0, i0); i <= Math.min(N - 1, i1); i++) {
+      var mid = (outer[i] + inner[i]) / 2;
+      if (x >= mid) { if (x < outer[i]) outer[i] = Math.max(inner[i], x); } else if (x > inner[i]) inner[i] = Math.min(outer[i], x);
+    }
+  }
+};
 CUT.apply = function (pts, outer, inner, tl) {
   if (toolKind(tl) === 'drill' && toolDia(tl) > 0) { CUT.drill(pts, outer, inner, toolDia(tl)); return; }
+  if (toolKind(tl) === 'groove') { var gg = toolGroove(tl); CUT.groove(pts, outer, inner, gg.w, gg.ref); return; }
   var N = CUT.N, span = CUT.z1 - CUT.z0, FACE_ALLOW = 0.15;
   for (var p = 1; p < pts.length; p++) {
     var q = pts[p], pr = pts[p - 1], i = Math.round((q.z - CUT.z0) / span * (N - 1));
@@ -3371,13 +3389,91 @@ function drawCutMaterial(col) {
     ctx.globalAlpha = 1;
   } else drawCut3D(o, n, zAt, N, dark);
   ctx.restore();
+  if (view === '2d' && $('chuckOn').checked && stock.d > 0) drawChuck2D(dark, true);
+  var area = 0; for (var ai = 0; ai < N; ai++) area += Math.max(0, o[ai] - n[ai]) * 1000 / N;
+  chipFrame(area); chipDraw();
   if (CUT.tip) { var tp2 = proj(CUT.tip.z, CUT.tip.x, I.pos.c); ctx.fillStyle = css('--warn'); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tp2[0], tp2[1], 4, 0, 6.2832); ctx.fill(); ctx.stroke(); }
+  var gcs = I.motion.length ? I.motion[Math.max(0, Math.min(I.motion.length - 1, CUT.shownIdx - 1))] : null, gtl = gcs ? cutToolFor(gcs) : null;
+  if (CUT.tip && gtl && toolKind(gtl) === 'groove' && view === '2d') { // draw the blade so its width is visible
+    var gg2 = toolGroove(gtl), gza = CUT.tip.z + (gg2.ref === 'right' ? -gg2.w : gg2.ref === 'center' ? -gg2.w / 2 : 0), ga = p2d(gza, CUT.tip.x), gb = p2d(gza + gg2.w, CUT.tip.x + 0.4);
+    ctx.fillStyle = 'rgba(246,212,107,.22)'; ctx.strokeStyle = css('--warn'); ctx.lineWidth = 1.2; ctx.fillRect(ga[0], gb[1], gb[0] - ga[0], ga[1] - gb[1]); ctx.strokeRect(ga[0], gb[1], gb[0] - ga[0], ga[1] - gb[1]);
+  }
   cutBarUpdate();
+}
+/* ---- 3-jaw chuck: body + stepped hard jaws gripping the back of the stock ---- */
+function chuckGeom() { var r = stock.d / 2, CR = Math.max((stock.cd > 0 ? stock.cd : 8) / 2, r + 0.9); return { r: r, z0: stock.z - stock.l, CR: CR, g: Math.min(stock.cg > 0 ? stock.cg : 1.0, Math.max(0.2, stock.l * 0.9)), jh: Math.max(0.3, Math.min(1.1, CR - r - 0.6)), bt: 3.0 }; }
+CUT.spin = 0;
+function drawChuck2D(dark, front) {
+  var G = chuckGeom(), r = G.r, z0 = G.z0, CR = G.CR, sc = Math.abs(p2d(1, 0)[0] - p2d(0, 0)[0]);
+  function strip(za, zb, va, vb, stops) { var a = p2d(za, va), b = p2d(zb, vb), g = ctx.createLinearGradient(0, a[1], 0, b[1]); stops.forEach(function (s) { g.addColorStop(s[0], s[1]); }); ctx.fillStyle = g; var x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]); ctx.fillRect(x, y, w, h); ctx.strokeStyle = dark ? '#0b0f14' : '#38414c'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h); }
+  var steel = dark ? [[0, '#e1e8ef'], [0.5, '#a3afbd'], [1, '#56616f']] : [[0, '#ffffff'], [0.5, '#cfd7e0'], [1, '#7f8b99']];
+  var steelFar = dark ? [[0, '#7d8896'], [0.5, '#56616f'], [1, '#2f3843']] : [[0, '#c3ccd6'], [0.5, '#98a3af'], [1, '#5c6672']];
+  var master = dark ? [[0, '#a9b4c1'], [0.5, '#6c7886'], [1, '#3a4452']] : [[0, '#dfe5eb'], [0.5, '#a3adb9'], [1, '#6a7482']];
+  function jaw(th, rad0, rad1, za, zb, hw, stops) {
+    var cs = Math.cos(th), sn = Math.sin(th), lo = 1e9, hi = -1e9; [rad0, rad1].forEach(function (rr) { [-hw, hw].forEach(function (tn) { var v = rr * cs - tn * sn; if (v < lo) lo = v; if (v > hi) hi = v; }); });
+    strip(za, zb, hi, lo, stops);
+    return [hi, lo];
+  }
+  var th0 = CUT.spin, jaws = [0, 1, 2].map(function (k) { return th0 + k * 2.0944; });
+  ctx.save();
+  if (!front) {
+    strip(z0 - G.bt - 1.2, z0 - G.bt, 2.4, -2.4, [[0, dark ? '#242c36' : '#79848f'], [0.5, dark ? '#10151b' : '#4d5762'], [1, dark ? '#1b222b' : '#69737f']]);
+    strip(z0 - G.bt, z0, CR, -CR, [[0, dark ? '#3a4552' : '#8b96a3'], [0.18, dark ? '#4c5967' : '#a5afbb'], [0.5, dark ? '#242c36' : '#5d6874'], [0.82, dark ? '#4c5967' : '#a5afbb'], [1, dark ? '#303a46' : '#7a8591']]);
+    [0.35, 0.9].forEach(function (s) { var a = p2d(z0 - s, CR), b = p2d(z0 - s, -CR); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.strokeStyle = dark ? 'rgba(0,0,0,.45)' : 'rgba(0,0,0,.25)'; ctx.lineWidth = 1; ctx.stroke(); });
+    for (var b = 0; b < 3; b++) { var tb = th0 + b * 2.0944 + 1.0472; if (Math.sin(tb) <= 0) continue; var bp = p2d(z0 - 1.7, CR * 0.94 * Math.cos(tb)), sq = 0.5 + 0.5 * Math.sin(tb); ctx.fillStyle = dark ? '#0f1318' : '#3c4550'; ctx.beginPath(); ctx.ellipse(bp[0], bp[1], Math.max(1.5, 0.1 * sc * sq), Math.max(1.5, 0.1 * sc), 0, 0, 6.2832); ctx.fill(); ctx.strokeStyle = dark ? '#6c7886' : '#c3ccd6'; ctx.lineWidth = 1; ctx.stroke(); }
+    jaws.forEach(function (th) { if (Math.sin(th) > 0) return; jaw(th, r + G.jh, CR - 0.45, z0, z0 + 0.45, 0.7, master); jaw(th, r, r + G.jh, z0, z0 + G.g, 0.5, steelFar); });
+  } else {
+    jaws.forEach(function (th) { if (Math.sin(th) <= 0) return; jaw(th, r + G.jh, CR - 0.45, z0, z0 + 0.45, 0.7, master); var iv = jaw(th, r, r + G.jh, z0, z0 + G.g, 0.5, steel);
+      if (sc * 0.1 >= 3) { ctx.strokeStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(0,0,0,.3)'; ctx.lineWidth = 1; for (var s = 0.08; s < G.g - 0.04; s += 0.1) { var q0 = p2d(z0 + s, iv[0]), q1 = p2d(z0 + s, iv[1]); ctx.beginPath(); ctx.moveTo(q0[0], q0[1]); ctx.lineTo(q1[0], q1[1]); ctx.stroke(); } }
+    });
+  }
+  ctx.restore();
+}
+function chuckFaces3D(dark) {
+  var G = chuckGeom(), out = [], ca = Math.cos(cam.az), sa = Math.sin(cam.az), ce = Math.cos(cam.el), se = Math.sin(cam.el);
+  var L = [-0.45, 0.65, 0.62], ll = Math.hypot(L[0], L[1], L[2]); L = [L[0] / ll, L[1] / ll, L[2] / ll];
+  var H = [L[0], L[1], L[2] + 1], hl = Math.hypot(H[0], H[1], H[2]); H = [H[0] / hl, H[1] / hl, H[2] / hl];
+  function pc(P) { return p3d(P[0], Math.hypot(P[1], P[2]), Math.atan2(P[2], P[1]) * 180 / Math.PI); }
+  var TIER = 'b';
+  function off() { if (sa < 0) return 1e6; return TIER === 'b' ? -2e6 : TIER === 'jf' ? -1e6 : 1e6; }
+  function quad(P, N, base, tint) {
+    var u = N[2] * ca - N[1] * sa, v = N[2] * sa + N[1] * ca, vx = u, vy = N[0] * ce - v * se, vz = N[0] * se + v * ce; if (vz <= 0.02) return;
+    var diff = Math.max(0, vx * L[0] + vy * L[1] + vz * L[2]), spec = Math.pow(Math.max(0, vx * H[0] + vy * H[1] + vz * H[2]), 28) * tint[3];
+    var k = (dark ? 0.2 : 0.34) + 0.66 * diff, c = [0, 1, 2].map(function (i) { return Math.round(Math.min(255, base * tint[i] * k + 255 * 0.5 * spec)); });
+    var cx = 0, cy = 0, cz = 0; P.forEach(function (q) { cz += q[0] / 4; cx += q[1] / 4; cy += q[2] / 4; });
+    out.push({ dep: cx * se + (cz * sa + cy * ca) * ce + off(), rgb: 'rgb(' + c.join(',') + ')', p: P.map(pc) });
+  }
+  var paint = [0.92, 1.0, 1.1, 0.25], steel = [1, 1.02, 1.07, 1];
+  function ring(za, zb, ra, rb, segs, nz, base, tint, radialN) {
+    for (var a = 0; a < segs; a++) {
+      var a0 = a * 2 * Math.PI / segs, a1 = (a + 1) * 2 * Math.PI / segs, am = (a0 + a1) / 2, c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+      if (radialN) quad([[za, ra * c0, ra * s0], [za, ra * c1, ra * s1], [zb, ra * c1, ra * s1], [zb, ra * c0, ra * s0]], [Math.cos(am), Math.sin(am), 0], base, tint);
+      else quad([[za, ra * c0, ra * s0], [za, ra * c1, ra * s1], [za, rb * c1, rb * s1], [za, rb * c0, rb * s0]], [0, 0, nz], base, tint);
+    }
+  }
+  var z0 = G.z0, zb = z0 - G.bt; TIER = 'b';
+  for (var s = 0; s < 3; s++) ring(zb + s * G.bt / 3, zb + (s + 1) * G.bt / 3, G.CR, 0, 56, 0, 128, paint, true);
+  ring(z0, z0, G.r, G.CR * 0.7, 56, 1, 128, paint, false); ring(z0, z0, G.CR * 0.7, G.CR, 56, 1, 118, paint, false);
+  ring(zb, zb, 0, G.CR, 56, -1, 110, paint, false);
+  for (var bh = 0; bh < 3; bh++) { var ba = CUT.spin + (150 + 120 * bh) * Math.PI / 180, bc = Math.cos(ba), bs = Math.sin(ba), rb = G.CR * 0.84, ew = 0.13; quad([[z0 + 0.004, (rb - ew) * bc + ew * bs, (rb - ew) * bs - ew * bc], [z0 + 0.004, (rb + ew) * bc + ew * bs, (rb + ew) * bs - ew * bc], [z0 + 0.004, (rb + ew) * bc - ew * bs, (rb + ew) * bs + ew * bc], [z0 + 0.004, (rb - ew) * bc - ew * bs, (rb - ew) * bs + ew * bc]], [0, 0, 1], 38, [1, 1.05, 1.15, 0]); }
+  ring(zb - 1.2, zb, 2.4, 0, 32, 0, 100, paint, true);
+  function box(ja, r0, r1, za, zbb, hw, base) {
+    var er = [Math.cos(ja), Math.sin(ja)], et = [-er[1], er[0]]; TIER = (er[0] * se + er[1] * ca * ce) > 0 ? 'jn' : 'jf';
+    function P(rad, tn, z) { return [z, er[0] * rad + et[0] * tn, er[1] * rad + et[1] * tn]; }
+    quad([P(r1, -hw, za), P(r1, hw, za), P(r1, hw, zbb), P(r1, -hw, zbb)], [er[0], er[1], 0], base, steel);
+    quad([P(r0, -hw, za), P(r1, -hw, za), P(r1, hw, za), P(r0, hw, za)], [0, 0, -1], base, steel);
+    quad([P(r0, -hw, zbb), P(r1, -hw, zbb), P(r1, hw, zbb), P(r0, hw, zbb)], [0, 0, 1], base, steel);
+    quad([P(r0, hw, za), P(r1, hw, za), P(r1, hw, zbb), P(r0, hw, zbb)], [et[0], et[1], 0], base, steel);
+    quad([P(r0, -hw, za), P(r1, -hw, za), P(r1, -hw, zbb), P(r0, -hw, zbb)], [-et[0], -et[1], 0], base, steel);
+    quad([P(r0, -hw, za), P(r0, hw, za), P(r0, hw, zbb), P(r0, -hw, zbb)], [-er[0], -er[1], 0], base, steel);
+  }
+  for (var j = 0; j < 3; j++) { var ja = (90 + 120 * j) * Math.PI / 180 + CUT.spin; box(ja, G.r + G.jh, G.CR - 0.45, z0, z0 + 0.45, 0.7, 150); box(ja, G.r, G.r + G.jh, z0, z0 + G.g, 0.5, 205); }
+  return out;
 }
 /* 3D: lit, depth-sorted revolved surface (outer skin + bore), with an optional cutaway quarter so holes show. */
 function drawCut3D(o, n, zAt, N, dark) {
   var A = 60, da = 360 / A, step = Math.max(1, Math.round(N / 64)), ca = Math.cos(cam.az), sa = Math.sin(cam.az), ce = Math.cos(cam.el), se = Math.sin(cam.el);
-  var cmode = $('cutAway').value, cut = cmode !== 'off', ac = cmode === 'half' ? 90 : 58, hw = cmode === 'half' ? 90 : 46; // fixed in the part, so orbiting never changes the shape
+  var cmode = $('cutAway').value, cut = cmode !== 'off', ac = cmode === 'half' ? 90 : cmode === 'quarter' ? 45 : 58, hw = cmode === 'half' ? 90 : cmode === 'quarter' ? 45 : 46; // fixed in the part, so orbiting never changes the shape
   function inWedge(a) { if (!cut) return false; var d = ((a - ac + 540) % 360) - 180; return Math.abs(d) < hw; }
   var L = [-0.45, 0.65, 0.62], ll = Math.hypot(L[0], L[1], L[2]); L = [L[0] / ll, L[1] / ll, L[2] / ll];
   var H = [L[0], L[1], L[2] + 1], hl = Math.hypot(H[0], H[1], H[2]); H = [H[0] / hl, H[1] / hl, H[2] / hl];
@@ -3419,9 +3515,10 @@ function drawCut3D(o, n, zAt, N, dark) {
     }
   }
   addCap(N - 1, 1); addCap(0, -1);
+  if ($('chuckOn').checked) faces = faces.concat(chuckFaces3D(dark));
   faces.sort(function (a, b) { return a.dep - b.dep; });
   for (var f = 0; f < faces.length; f++) {
-    var F = faces[f], c = Math.round(F.c), col = 'rgb(' + c + ',' + Math.min(255, c + 6) + ',' + Math.min(255, c + 14) + ')';
+    var F = faces[f], c = Math.round(F.c), col = F.rgb || 'rgb(' + c + ',' + Math.min(255, c + 6) + ',' + Math.min(255, c + 14) + ')';
     ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(F.p[0][0], F.p[0][1]);
     for (var q = 1; q < 4; q++) ctx.lineTo(F.p[q][0], F.p[q][1]); ctx.closePath(); ctx.fill(); ctx.stroke();
   }
@@ -3437,16 +3534,112 @@ function drawCut3D(o, n, zAt, N, dark) {
     });
   }
 }
-function cutTick(ts) {
-  if (!CUT.playing) return;
-  var dt = CUT.last ? Math.min(0.1, (ts - CUT.last) / 1000) : 0; CUT.last = ts;
-  CUT.t += dt * cutSpeedFactor();
-  if (CUT.t >= CUT.total()) { CUT.t = CUT.total(); CUT.playing = false; }
-  draw(); if (CUT.playing) requestAnimationFrame(cutTick);
+/* ---- chips: little curls that fly off the tool while it cuts ---- */
+CUT.chips = []; CUT.areaPrev = null; CUT.prevTip = null; CUT.chipT = 0;
+function chipEmit(x, y, bx, by, n) {
+  // (bx,by) = unit vector pointing back along the tool's travel; chips leave back and up, curling as they go
+  for (var k = 0; k < n && CUT.chips.length < 600; k++) {
+    var sp = 50 + Math.random() * 140, spread = (Math.random() - 0.5) * 1.2, ca = Math.cos(spread), sa = Math.sin(spread);
+    var dx = bx * ca - by * sa, dy = bx * sa + by * ca;
+    var q = Math.random(), kind = q < 0.46 ? 'curl' : q < 0.84 ? 'coil' : 'dust';
+    CUT.chips.push({ kind: kind, x: x, y: y, vx: dx * sp * (kind === 'dust' ? 1.5 : 1), vy: dy * sp - (kind === 'dust' ? 30 : 70) - Math.random() * 110, a: Math.random() * 6.28, w: (Math.random() - 0.5) * 22, r: kind === 'dust' ? 0.7 + Math.random() * 0.9 : 2.2 + Math.random() * 3.6, arc: 1.6 + Math.random() * 2.2,
+      L: 22 + Math.random() * 30, A: 3 + Math.random() * 4, turns: 1 + Math.random() * 1.4, ph: Math.random() * 6.28, spin: 3 + Math.random() * 7, life: 0, max: kind === 'dust' ? 0.35 + Math.random() * 0.4 : 0.9 + Math.random() * 0.9, hot: Math.random() < 0.6 });
+  }
 }
-function cutPlayFromStart() { CUT.sync(); CUT.mode = 'replay'; CUT.t = 0; CUT.playing = CUT.total() > 0; CUT.last = 0; draw(); if (CUT.playing) requestAnimationFrame(cutTick); }
-function cutAfterStop() { if (CUT.on && machine !== 'mill' && I && I.status === 'done' && I.motion.length) cutPlayFromStart(); }
-$('cutAway').onchange = draw;
+/* Drilling: long coiled chips come up the flutes and shoot out of the hole mouth along the spindle axis, tumbling as they go. */
+function chipEmitDrill(mx, my, ux, uy, holeR, n) {
+  for (var k = 0; k < n && CUT.chips.length < 600; k++) {
+    if (Math.random() > 0.1) continue; // drill swarf: about a tenth as many, but long
+    var sp = 70 + Math.random() * 130, spread = (Math.random() - 0.5) * 0.7, ca = Math.cos(spread), sa = Math.sin(spread);
+    var dx = ux * ca - uy * sa, dy = ux * sa + uy * ca, off = (Math.random() - 0.5) * 2 * holeR * 0.7, fine = false;
+    CUT.chips.push({ kind: fine ? 'arc' : 'coil', x: mx - uy * off, y: my + ux * off, vx: dx * sp, vy: dy * sp - 40 - Math.random() * 70, a: Math.random() * 6.28, w: (Math.random() - 0.5) * 14, r: fine ? 2 + Math.random() * 2.4 : 0, arc: 1.6 + Math.random() * 2, L: 70 + Math.random() * 70, A: 3 + Math.random() * 2.4, turns: 6 + Math.random() * 4, ph: Math.random() * 6.28, spin: 6 + Math.random() * 10, life: 0, max: 1.5 + Math.random() * 1.0, hot: Math.random() < 0.6 });
+  }
+}
+function chipStep(dt) {
+  var g = 980, ch = CUT.chips; if (!ch.length) return;
+  for (var i = ch.length - 1; i >= 0; i--) {
+    var c = ch[i]; c.life += dt; if (c.life >= c.max) { ch.splice(i, 1); continue; }
+    if (!c.rest) { c.vy += g * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.a += c.w * dt; c.vx *= (1 - 0.35 * dt); if (c.kind !== 'dust') c.ph += c.spin * dt; }
+    if (c.y > cv.height / (window.devicePixelRatio || 1) + 40) { ch.splice(i, 1); continue; }
+  }
+}
+var CHIPSPR = {};
+function chipSprite(rgb) { // a lit metal ball; chips are drawn as tubes of these, so they read as solid 3D curls instead of pen strokes
+  var k = rgb.join(','); if (CHIPSPR[k]) return CHIPSPR[k];
+  var s = 40, cn = document.createElement('canvas'); cn.width = cn.height = s; var x = cn.getContext('2d');
+  function sh(f) { return 'rgb(' + rgb.map(function (v) { return Math.max(0, Math.min(255, Math.round(v * f))); }).join(',') + ')'; }
+  var g = x.createRadialGradient(s * 0.36, s * 0.3, s * 0.02, s * 0.5, s * 0.5, s * 0.5);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.16, sh(1.55)); g.addColorStop(0.45, sh(1.0)); g.addColorStop(0.8, sh(0.42)); g.addColorStop(1, sh(0.12));
+  x.fillStyle = g; x.beginPath(); x.arc(s / 2, s / 2, s / 2, 0, 6.2832); x.fill(); CHIPSPR[k] = cn; return cn;
+}
+function chipPath(c, f) {
+  var pts = [], rf = 1 - f * 0.25, tube = c.kind === 'coil' ? 2.7 : 1.5 + c.r * 0.22;
+  if (c.kind === 'dust') { pts.push({ x: c.x, y: c.y, d: 0, r: Math.max(1.1, c.r * 1.2) }); return pts; }
+  if (c.kind === 'curl' || c.kind === 'arc') { // tight 6/9 curl: a spiral whose tube swings toward and away from the viewer
+    var n = 28, sw = c.kind === 'arc' ? c.arc : c.arc + 2.6;
+    for (var s = 0; s <= n; s++) { var u = s / n, an = c.a + u * sw, rr = (c.r + 1.5) * (0.35 + 1.0 * u), dd = Math.sin(u * 4.2 + c.ph); pts.push({ x: c.x + Math.cos(an) * rr, y: c.y + Math.sin(an) * rr * 0.9, d: dd, r: tube * (0.88 + 0.22 * dd) }); }
+    return pts;
+  }
+  var th = c.rest ? c.a : Math.atan2(c.vy, c.vx), ux = Math.cos(th), uy = Math.sin(th), px = -uy, py = ux, n2 = Math.ceil(Math.hypot(c.L, c.turns * 6.2832 * c.A * 0.8) / (tube * 0.5)) + 6; // helical spring chip
+  for (var s2 = 0; s2 <= n2; s2++) { var v = s2 / n2, ph = c.ph + v * c.turns * 6.2832, env = 0.55 + 0.45 * Math.sin(v * 3.14159), R = c.A * env, dd2 = Math.cos(ph); pts.push({ x: c.x + ux * v * c.L * rf + px * R * Math.sin(ph), y: c.y + uy * v * c.L * rf + py * R * Math.sin(ph), d: dd2, r: tube * (0.88 + 0.22 * dd2) }); }
+  return pts;
+}
+function chipDraw() {
+  var ch = CUT.chips; if (!ch.length) return;
+  var dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  ctx.save();
+  for (var i = 0; i < ch.length; i++) {
+    var c = ch[i], f = c.life / c.max, al = f < 0.65 ? 1 : 1 - (f - 0.65) / 0.35;
+    var rgb = c.hot ? (f < 0.2 ? [255, 226, 140] : f < 0.4 ? [232, 178, 66] : f < 0.65 ? [196, 146, 84] : [112, 144, 214]) : (dark ? [176, 186, 198] : [130, 140, 152]);
+    var spr = chipSprite(rgb), pts = chipPath(c, f); ctx.globalAlpha = Math.max(0, al);
+    if (pts.length > 1) pts.sort(function (a, b) { return a.d - b.d; }); // far side of the coil first, near side over it
+    for (var k = 0; k < pts.length; k++) { var q = pts[k]; ctx.drawImage(spr, q.x - q.r, q.y - q.r, q.r * 2, q.r * 2); }
+  }
+  ctx.restore();
+}
+function chipFrame(area) {
+  var now = performance.now(), dt = CUT.chipT ? Math.min(0.05, (now - CUT.chipT) / 1000) : 0; CUT.chipT = now;
+  var csg = I && I.motion.length ? I.motion[Math.max(0, Math.min(I.motion.length - 1, CUT.shownIdx - 1))] : null, spT = 0;  // chuck turns only while the spindle is on (M03/M04), eases down on M05
+  if (CUT.playing && csg && csg.spOn) spT = 4 + 6 * Math.min(1, (csg.rpm || 0) / 3000);
+  CUT.spinW = (CUT.spinW || 0) + (spT - (CUT.spinW || 0)) * Math.min(1, dt * 6); CUT.spin += CUT.spinW * dt;
+  var on = $('chipsOn').checked;
+  if (!on) { CUT.chips.length = 0; CUT.areaPrev = area; return; }
+  if (CUT.playing && CUT.areaPrev != null && CUT.tip) {
+    var removed = CUT.areaPrev - area, tp = proj(CUT.tip.z, CUT.tip.x, I.pos.c);
+    if (removed > 1e-6) {
+      var m = I.motion, cs = m[Math.max(0, Math.min(m.length - 1, CUT.shownIdx - 1))], tl = cs ? cutToolFor(cs) : null;
+      if (tl && toolKind(tl) === 'drill' && toolDia(tl) > 0) {
+        var mo = proj(CUT.z1, 0, I.pos.c), mo2 = proj(CUT.z1 + 0.5, 0, I.pos.c), ax = mo2[0] - mo[0], ay = mo2[1] - mo[1], al = Math.hypot(ax, ay) || 1;
+        chipEmitDrill(mo[0], mo[1], ax / al, ay / al, toolDia(tl) / 2 * cam.scale, Math.min(3, Math.ceil(removed * 0.4)));
+        CUT.prevTip = tp; CUT.areaPrev = area; chipStep(dt); return;
+      }
+      var bx = 0.0, by = -1;
+      if (CUT.prevTip) { var vx = CUT.prevTip[0] - tp[0], vy = CUT.prevTip[1] - tp[1], l = Math.hypot(vx, vy); if (l > 0.3) { bx = vx / l; by = vy / l; } }
+      chipEmit(tp[0], tp[1], bx, by, Math.min(4, Math.ceil(removed * 0.5)));
+    }
+    CUT.prevTip = tp;
+  } else if (CUT.tip) CUT.prevTip = proj(CUT.tip.z, CUT.tip.x, I.pos.c);
+  CUT.areaPrev = area; chipStep(dt);
+}
+function cutTick(ts) {
+  if (!CUT.playing && !CUT.chips.length) return;
+  var dt = CUT.last ? Math.min(0.1, (ts - CUT.last) / 1000) : 0; CUT.last = ts;
+  if (CUT.playing) { CUT.t += dt * cutSpeedFactor(); if (CUT.t >= CUT.total()) { CUT.t = CUT.total(); CUT.playing = false; } }
+  draw(); if (CUT.playing || CUT.chips.length) requestAnimationFrame(cutTick);
+}
+function cutPlayFromStart() { CUT.areaPrev = null; CUT.prevTip = null; CUT.chips.length = 0; CUT.sync(); CUT.mode = 'replay'; CUT.t = 0; CUT.playing = CUT.total() > 0; CUT.last = 0; draw(); if (CUT.playing) requestAnimationFrame(cutTick); }
+function enterIsoQuarter() { // isometric camera, quarter cut-away opening toward the viewer, material removal on
+  var cvEl = $('cutView'); if (!cvEl.checked) { cvEl.checked = true; cvEl.onchange.call(cvEl); }
+  if (view !== '3d') { view = '3d'; $('v3d').classList.add('on'); $('v2d').classList.remove('on'); }
+  $('cutAway').value = 'quarter'; cam.az = 0.7854; cam.el = 0.6155; cam.fitDone = false;
+}
+function cutAfterStop() {
+  if (machine === 'mill' || !I || I.status !== 'done' || !I.motion.length) return;
+  if ($('autoIso').checked) enterIsoQuarter();
+  if (CUT.on) cutPlayFromStart();
+}
+$('autoIso').checked = lsGet('ams.autoIso', true); $('autoIso').onchange = function () { lsSet('ams.autoIso', this.checked); };
+$('cutAway').onchange = draw; $('chuckOn').onchange = draw;
 (function () { // collapsible + resizable side panels (state remembered in this browser)
   var main = $('main'), left = $('left'), right = $('right');
   function relayout() { cam.fitDone = false; setTimeout(function () { resize(); }, 0); }
@@ -3483,7 +3676,7 @@ $('cutView').onchange = function () {
   if (CUT.on) { CUT.mode = 'follow'; if (I && I.status === 'done' && I.motion.length) cutPlayFromStart(); else draw(); } else { CUT.playing = false; draw(); }
 };
 $('cutPlay').onclick = function () { if (CUT.playing) { CUT.playing = false; draw(); } else if (CUT.mode === 'replay' && CUT.t < CUT.total() - 1e-6) { CUT.playing = true; CUT.last = 0; requestAnimationFrame(cutTick); } else cutPlayFromStart(); };
-$('cutScrub').oninput = function () { CUT.sync(); CUT.mode = 'replay'; CUT.playing = false; CUT.t = parseFloat(this.value) / 1000 * CUT.total(); draw(); };
+$('cutScrub').oninput = function () { CUT.areaPrev = null; CUT.chips.length = 0; CUT.sync(); CUT.mode = 'replay'; CUT.playing = false; CUT.t = parseFloat(this.value) / 1000 * CUT.total(); draw(); };
 
 /* ---------- rendering ---------- */
 var cv = $('cv'), ctx = cv.getContext('2d');
@@ -3495,6 +3688,7 @@ function bounds() {
   var b = { z0: Infinity, z1: -Infinity, x0: Infinity, x1: -Infinity };
   function add(z, x) { if (z < b.z0) b.z0 = z; if (z > b.z1) b.z1 = z; if (x < b.x0) b.x0 = x; if (x > b.x1) b.x1 = x; }
   if ($('showStock').checked) { add(stock.z - stock.l, 0); add(stock.z, stock.d / 2); }
+  if ($('chuckOn') && $('chuckOn').checked && stock.d > 0) { var G0 = chuckGeom(); add(G0.z0 - G0.bt - 0.6, G0.r + G0.jh + 0.3); }
   if (I) { var cut = I.motion.filter(function (s) { return s.type !== 'rapid'; }); (cut.length ? cut : I.motion).forEach(function (s) { add(s.from.z, s.from.x); add(s.to.z, s.to.x); }); }
   if (!isFinite(b.z0)) { add(-3, 0); add(0.5, 1.5); }
   return b;
@@ -3504,7 +3698,7 @@ function fit() {
   var b = bounds(), W = cv.width / (window.devicePixelRatio || 1), H = cv.height / (window.devicePixelRatio || 1);
   var dz = Math.max(0.5, b.z1 - b.z0), dx = Math.max(0.25, (view === '2d' ? b.x1 * 2 : b.x1 - Math.min(0, b.x0)));
   if (view === '2d') { cam.scale = Math.min((W - 60) / dz, (H - 60) / (dx * 1.15)); cam.pan.x = W / 2 - ((b.z0 + b.z1) / 2) * cam.scale; cam.pan.y = H / 2; }
-  else { var ext = Math.max(dz, b.x1 * 2) * 1.2; cam.scale = Math.min(W, H) / ext * 0.8; cam.pan.x = W / 2 - ((b.z0 + b.z1) / 2) * cam.scale * Math.cos(cam.az); cam.pan.y = H / 2 + ((b.z0 + b.z1) / 2) * cam.scale * Math.sin(cam.az) * Math.sin(cam.el); }
+  else { var ext = Math.max(dz, b.x1 * 2) * 1.4; cam.scale = Math.min(W, H) / ext * 0.8; cam.pan.x = W / 2 - ((b.z0 + b.z1) / 2) * cam.scale * Math.cos(cam.az); cam.pan.y = H / 2 + ((b.z0 + b.z1) / 2) * cam.scale * Math.sin(cam.az) * Math.sin(cam.el); }
   cam.fitDone = true;
 }
 function p2d(z, x) { return [cam.pan.x + z * cam.scale, cam.pan.y - x * cam.scale]; }
@@ -3543,14 +3737,19 @@ function draw() {
       var f0 = p2d(z1, -r), f1 = p2d(z1, r); ctx.beginPath(); ctx.moveTo(f0[0], f0[1]); ctx.lineTo(f1[0], f1[1]); ctx.stroke();
       if (rb > 0) [rb, -rb].forEach(function (rr) { var p = p2d(z0, rr), q = p2d(z1, rr); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); });
       ctx.setLineDash([]);
-      ctx.fillStyle = col.muted; ctx.font = '9px monospace'; ctx.fillText('CHUCK', p2d(z0, r)[0] - 44, p2d(z0, r)[1] - 4); ctx.fillText('FACE Z' + stock.z, f1[0] + 4, f1[1] - 4);
+      ctx.fillStyle = col.muted; ctx.font = '9px monospace'; if (!$('chuckOn').checked) ctx.fillText('CHUCK', p2d(z0, r)[0] - 44, p2d(z0, r)[1] - 4); ctx.fillText('FACE Z' + stock.z, f1[0] + 4, f1[1] - 4);
     } else {
       [z0, z1].forEach(function (zz) { ctx.beginPath(); for (var i = 0; i <= 48; i++) { var p = p3d(zz, r, i * 7.5); if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]); } ctx.stroke(); });
       for (var k = 0; k < 360; k += 45) { var p0 = p3d(z0, r, k), p1 = p3d(z1, r, k); ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke(); }
-      var cz = p3d(z0 - 0.4, 0, 0); ctx.fillStyle = col.muted; ctx.font = '9px monospace'; ctx.fillText('CHUCK', cz[0] - 20, cz[1]);
+      var cz = p3d(z0 - 0.4, 0, 0); ctx.fillStyle = col.muted; ctx.font = '9px monospace'; if (!$('chuckOn').checked) ctx.fillText('CHUCK', cz[0] - 20, cz[1]);
     }
   }
+  if ($('chuckOn').checked && stock.d > 0) {
+    if (view === '2d') drawChuck2D(document.documentElement.getAttribute('data-theme') !== 'light', false);
+    else if (!(CUT.on && I)) chuckFaces3D(document.documentElement.getAttribute('data-theme') !== 'light').sort(function (a, b) { return a.dep - b.dep; }).forEach(function (F) { ctx.fillStyle = F.rgb; ctx.strokeStyle = F.rgb; ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(F.p[0][0], F.p[0][1]); for (var q = 1; q < 4; q++) ctx.lineTo(F.p[q][0], F.p[q][1]); ctx.closePath(); ctx.fill(); ctx.stroke(); });
+  }
   drawCutMaterial(col);
+  if (!(CUT.on && I) && view === '2d' && $('chuckOn').checked && stock.d > 0) drawChuck2D(document.documentElement.getAttribute('data-theme') !== 'light', true);
   if (!I) return;
   var showProg = $('showProg').checked;
   (($('showPath').checked) ? cutMotion() : []).forEach(function (s) {
@@ -3667,10 +3866,10 @@ function renderStack() {
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 function renderTools() {
   if (machine === 'mill') return renderToolsMill();
-  var h = ['<table><tr><th>T</th><th>Geom X</th><th>Geom Z</th><th>Wear X</th><th>Wear Z</th><th>R</th><th>Tip</th><th>Label</th><th title="How the material-removal view cuts with this tool">Cut</th><th title="Drill diameter">Drill Ø</th></tr>'];
-  for (var i = 1; i <= 12; i++) { var t = tools[i]; h.push('<tr><td>' + pad2(i) + '</td>' + ['geomX', 'geomZ', 'wearX', 'wearZ', 'r'].map(function (k) { return '<td><input data-t="' + i + '" data-k="' + k + '" value="' + t[k] + '"></td>'; }).join('') + '<td><input data-t="' + i + '" data-k="tip" value="' + t.tip + '" style="width:36px"></td><td><input data-t="' + i + '" data-k="label" value="' + (t.label || '') + '" style="width:110px;text-align:left"></td><td><select data-t="' + i + '" data-k="kind"><option value="turn"' + (toolKind(t) === 'turn' ? ' selected' : '') + '>Turn</option><option value="drill"' + (toolKind(t) === 'drill' ? ' selected' : '') + '>Drill</option></select></td><td><input data-t="' + i + '" data-k="dia" value="' + (toolKind(t) === 'drill' ? (toolDia(t) || '') : '') + '" style="width:54px"></td></tr>'); }
+  var h = ['<table><tr><th>T</th><th>Geom X</th><th>Geom Z</th><th>Wear X</th><th>Wear Z</th><th>R</th><th>Tip</th><th>Label</th><th title="How the material-removal view cuts with this tool">Cut</th><th title="Drill diameter">Drill Ø</th><th title="Groove blade width">Groove W</th><th title="Which corner of the groove blade is the programmed point">Ref</th></tr>'];
+  for (var i = 1; i <= 12; i++) { var t = tools[i]; h.push('<tr><td>' + pad2(i) + '</td>' + ['geomX', 'geomZ', 'wearX', 'wearZ', 'r'].map(function (k) { return '<td><input data-t="' + i + '" data-k="' + k + '" value="' + t[k] + '"></td>'; }).join('') + '<td><input data-t="' + i + '" data-k="tip" value="' + t.tip + '" style="width:36px"></td><td><input data-t="' + i + '" data-k="label" value="' + (t.label || '') + '" style="width:84px;text-align:left"></td><td><select data-t="' + i + '" data-k="kind"><option value="turn"' + (toolKind(t) === 'turn' ? ' selected' : '') + '>Turn</option><option value="drill"' + (toolKind(t) === 'drill' ? ' selected' : '') + '>Drill</option><option value="groove"' + (toolKind(t) === 'groove' ? ' selected' : '') + '>Groove</option></select></td><td><input data-t="' + i + '" data-k="dia" value="' + (toolKind(t) === 'drill' ? (toolDia(t) || '') : '') + '" style="width:54px"></td><td><input data-t="' + i + '" data-k="gw" value="' + (toolKind(t) === 'groove' ? toolGroove(t).w : '') + '" style="width:54px"></td><td><select data-t="' + i + '" data-k="gref"><option value="left"' + (toolGroove(t).ref === 'left' ? ' selected' : '') + '>Left</option><option value="center"' + (toolGroove(t).ref === 'center' ? ' selected' : '') + '>Center</option><option value="right"' + (toolGroove(t).ref === 'right' ? ' selected' : '') + '>Right</option></select></td></tr>'); }
   h.push('</table>'); $('tools').innerHTML = h.join('');
-  $('tools').querySelectorAll('select').forEach(function (sl) { sl.onchange = function () { tools[+sl.dataset.t].kind = sl.value; lsSet(LS.tools, tools); renderTools(); if (CUT.on) draw(); }; });
+  $('tools').querySelectorAll('select').forEach(function (sl) { sl.onchange = function () { tools[+sl.dataset.t][sl.dataset.k] = sl.value; lsSet(LS.tools, tools); renderTools(); if (CUT.on) draw(); }; });
   $('tools').querySelectorAll('input').forEach(function (inp) { inp.onchange = function () { var t = tools[+inp.dataset.t], k = inp.dataset.k; t[k] = k === 'label' ? inp.value : (parseFloat(inp.value) || 0); if (k === 'tip') t.tip = Math.max(0, Math.min(9, Math.round(t.tip))); lsSet(LS.tools, tools); if (CUT.on) draw(); }; });
 }
 function renderWork() {
@@ -3744,7 +3943,8 @@ $('v2d').onclick = function () { view = '2d'; $('v2d').classList.add('on'); $('v
 $('v3d').onclick = function () { view = '3d'; $('v3d').classList.add('on'); $('v2d').classList.remove('on'); cam.fitDone = false; draw(); };
 $('vFit').onclick = function () { cam.fitDone = false; draw(); };
 $('showProg').onchange = draw; $('showPath').onchange = draw; $('showStock').onchange = draw;
-['stkD', 'stkL', 'stkB', 'stkZ'].forEach(function (id, i) { var k = ['d', 'l', 'b', 'z'][i]; $(id).value = stock[k]; $(id).onchange = function () { stock[k] = parseFloat($(id).value) || 0; lsSet(LS.stock, stock); cam.fitDone = false; draw(); }; });
+if (!(stock.cd > 0)) stock.cd = 8; if (!(stock.cg > 0)) stock.cg = 1;
+['stkD', 'stkL', 'stkB', 'stkZ', 'chkD', 'chkG'].forEach(function (id, i) { var k = ['d', 'l', 'b', 'z', 'cd', 'cg'][i]; $(id).value = stock[k]; $(id).onchange = function () { stock[k] = parseFloat($(id).value) || 0; lsSet(LS.stock, stock); cam.fitDone = false; draw(); }; });
 $('optStop').onchange = function () { if (I) I.opts.optionalStop = $('optStop').checked; };
 document.querySelectorAll('.tabs button').forEach(function (b) { b.onclick = function () { document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('on'); }); document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); $('tab-' + b.dataset.tab).classList.add('on'); if (b.dataset.tab === 'log') renderLog(true); else refreshAll(); }; });
 $('watchList').oninput = renderVars; $('show500').onchange = renderVars; $('logFilter').oninput = function () { renderLog(true); }; $('logClear').onclick = function () { if (I) { I.log = []; } renderLog(true); };
