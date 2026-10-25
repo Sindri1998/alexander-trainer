@@ -19,8 +19,8 @@ body{background:var(--bg);color:var(--text);font-family:monospace;font-size:12px
 .title{color:#fff;font-weight:800;font-size:14px;letter-spacing:.04em}
 .tag{color:#93b8d8;font-size:9px;letter-spacing:.2em;text-transform:uppercase}
 #nav .sp{flex:1}
-#main{flex:1;display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,1.4fr) minmax(300px,1fr);grid-template-rows:1fr auto;gap:6px;padding:6px;min-height:0}
-.pane{background:var(--surface);border:1px solid var(--border);border-radius:8px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#main{--cl:minmax(300px,1fr);--cc:minmax(320px,1.4fr);--cr:minmax(300px,1fr);flex:1;display:grid;grid-template-columns:var(--cl) var(--cc) var(--cr);grid-template-rows:1fr auto;gap:6px;padding:6px;min-height:0}
+.pane{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:8px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .pane h3{margin:0;padding:6px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex:0 0 auto}
 .pane h3 .sp{flex:1}
 .body{flex:1;min-height:0;overflow:auto}
@@ -100,6 +100,30 @@ td input{width:66px;text-align:right;padding:2px 4px}
 #testOut .p{color:var(--ok)}#testOut .f{color:var(--err);font-weight:700}
 kbd{background:var(--raised);border:1px solid var(--border);border-radius:4px;padding:0 4px;font-size:10px}
 [hidden]{display:none!important}
+#toolpathHdr{flex-wrap:wrap;row-gap:4px}
+#rightBar{display:flex;justify-content:flex-end;align-items:center;padding:3px 6px 0;flex:0 0 auto}
+#rightToggle{min-height:20px;padding:1px 8px;font-size:10px}
+#rightBar .vlabel{display:none}
+#main.lc{--cl:38px;--cc:minmax(320px,2.6fr)}
+#main.rc{--cr:38px;--cc:minmax(320px,2.6fr)}
+#main.lc.rc{--cc:minmax(320px,1fr)}
+#leftBar{display:flex;justify-content:flex-start;align-items:center;padding:3px 6px 0;flex:0 0 auto}
+#leftToggle{min-height:20px;padding:1px 8px;font-size:10px}
+#leftBar .vlabel{display:none}
+.pane.collapsed > *:not(#leftBar):not(#rightBar):not(.grip){display:none}
+#left.collapsed #leftBar{flex-direction:column;justify-content:flex-start;gap:10px;padding:6px 4px;height:100%}
+#left.collapsed #leftBar .vlabel{display:block;writing-mode:vertical-rl;font-size:9px;letter-spacing:.18em;color:var(--muted);order:2}
+#left.collapsed #leftToggle{padding:4px 6px;min-height:26px}
+#left h3{flex-wrap:wrap;row-gap:4px}
+#left h3 select{flex:1 1 120px;min-width:0}
+.grip{position:absolute;top:0;bottom:0;width:7px;cursor:col-resize;z-index:6;touch-action:none}
+.grip:hover,.grip.drag{background:var(--accent);opacity:.45}
+#gripL{right:0}#gripR{left:0}
+.pane.collapsed .grip{display:none}
+.pane.right.collapsed > *:not(#rightBar){display:none}
+.pane.right.collapsed #rightBar{flex-direction:column;justify-content:flex-start;gap:10px;padding:6px 4px;height:100%}
+.pane.right.collapsed #rightBar .vlabel{display:block;writing-mode:vertical-rl;font-size:9px;letter-spacing:.18em;color:var(--muted);order:2}
+.pane.right.collapsed #rightToggle{padding:4px 6px;min-height:26px}
 #cePage{flex:1;min-height:0;display:flex}
 #cePage iframe{flex:1;width:100%;border:0;background:var(--bg)}
 @media (max-width:1000px){#main{grid-template-columns:1fr 1fr}.pane.right{grid-column:1/-1}}
@@ -134,7 +158,7 @@ html.embed #testPanel{inset:20px 4% 20px}
 </head>
 <body>
 <div id="nav">
-  <span class="brand">ALEXANDER MACHINE SHOP</span>
+  <span class="brand">ALEXANDER'S MACHINE SHOP</span>
   <span class="badge"><span class="rad">RAD</span><span class="mfg">MFG</span></span>
   <span class="title" id="machTitle">LATHE SIM</span>
   <span class="tag" id="machTag">Fanuc 0i-TF · Macro B · DNT2600M</span>
@@ -147,6 +171,8 @@ html.embed #testPanel{inset:20px 4% 20px}
 <div id="cePage" hidden></div>
 <div id="main">
   <div class="pane" id="left">
+    <div class="grip" id="gripL" title="Drag to resize · double-click to reset"></div>
+    <div id="leftBar"><button class="ghost" id="leftToggle" title="Hide / show the program panel">◀ hide</button><span class="vlabel">PROGRAM</span></div>
     <h3>Program <span class="sp"></span>
       <select id="samples"><option value="">Load sample…</option></select>
       <button class="ghost" id="btnEdit" style="display:none">✎ Edit</button>
@@ -171,18 +197,30 @@ html.embed #testPanel{inset:20px 4% 20px}
     <h3 id="toolpathHdr">Toolpath <span class="sp"></span>
       <button class="sec on" id="v2d">2D Profile</button><button class="sec" id="v3d">3D Iso</button>
       <button class="ghost" id="vFit">⤢ Fit</button>
+      <label style="font-size:10px;color:var(--muted)" id="showPathWrap" title="Show or hide the drawn tool paths (rapid, feed, thread)"><input type="checkbox" id="showPath" checked> toolpath</label>
       <label style="font-size:10px;color:var(--muted)"><input type="checkbox" id="showProg" checked> programmed</label>
       <label style="font-size:10px;color:var(--muted)" id="showStockWrap"><input type="checkbox" id="showStock" checked> stock</label>
+      <label style="font-size:10px;color:var(--muted)" id="cutAwayWrap" title="3D: how the part is cut open so holes and bores show">cut <select id="cutAway" style="font-size:10px;padding:1px 3px"><option value="half" selected>half section</option><option value="notch">quarter notch</option><option value="off">solid</option></select></label>
+      <button class="ghost" id="cutSecBtn" title="Look straight at the cut face (flat section view)" style="min-height:22px;padding:2px 7px;font-size:10px">⊡ section view</button>
+      <label style="font-size:10px;color:var(--text);font-weight:700" id="cutViewWrap" title="Show the stock being cut away as the tool moves"><input type="checkbox" id="cutView"> ✂ material removal</label>
     </h3>
     <div id="canvasWrap"><canvas id="cv"></canvas>
       <div class="legend" id="legendLathe"><span><i style="background:var(--rapid)"></i>rapid</span><span><i style="background:var(--feed)"></i>feed</span><span><i style="background:var(--thread)"></i>thread</span><span><i style="background:var(--comp)"></i>tnrc center</span></div>
       <div class="legend" id="legendMill" style="display:none"><span><i style="background:var(--rapid)"></i>rapid</span><span><i style="background:var(--feed)"></i>feed</span><span><i style="background:var(--comp)"></i>cutter comp offset</span></div>
+    </div>
+    <div class="row" id="cutBar" hidden style="padding:4px 8px;border-top:1px solid var(--border);flex-wrap:nowrap">
+      <button class="sec" id="cutPlay" style="min-width:38px" title="Replay the cut from the start">▶</button>
+      <input type="range" id="cutScrub" min="0" max="1000" value="1000" style="flex:1;min-width:60px;padding:0;accent-color:#004990">
+      <select id="cutSpeed" title="Playback speed"><option value="1">Real time</option><option value="5">5×</option><option value="10" selected>10×</option><option value="25">25×</option><option value="100">100×</option><option value="0">Fast (3 s)</option></select>
+      <span id="cutTime" style="font-size:10px;color:var(--muted);white-space:nowrap;min-width:92px;text-align:right">0.0 / 0.0 s</span>
     </div>
     <div class="row" id="stockRow" style="padding:4px 8px;border-top:1px solid var(--border)">
       <label>Stock Ø</label><input class="n" id="stkD" value="2.5"><label>Len</label><input class="n" id="stkL" value="3.0"><label>Bore</label><input class="n" id="stkB" value="0"><label>Face at Z</label><input class="n" id="stkZ" value="0">
     </div>
   </div>
   <div class="pane right" id="right">
+    <div class="grip" id="gripR" title="Drag to resize · double-click to reset"></div>
+    <div id="rightBar"><span class="vlabel">VARS · LOG · STACK · TOOLS · WORK · MACHINE</span><button class="ghost" id="rightToggle" title="Hide / show the side panel">▶ hide</button></div>
     <div class="tabs">
       <button class="on" data-tab="vars">Vars</button><button data-tab="log">Log</button><button data-tab="stack">Stack</button><button data-tab="tools">Tools</button><button data-tab="work">Work</button><button data-tab="mach">Machine</button>
     </div>
@@ -2902,7 +2940,7 @@ function setMsg(t, cls) { var m = $('sMsg'); m.textContent = t; m.className = 'm
 
 /* ---------- program load / run ---------- */
 function loadProgram() {
-  stopRun();
+  stopRun(); CUT.reset();
   var text = $('src').value; loadedText = text; lsSet(progKey(), text);
   makeInterp(); I.opts.optionalStop = $('optStop').checked;
   var ok = I.load(text);
@@ -2927,7 +2965,7 @@ function runChunk() {
   if (I.status === 'running') runTimer = setTimeout(runChunk, 0); else { running = false; runTimer = null; afterStop(); }
 }
 function afterStop() {
-  if (!I) return;
+  if (!I) return; cutAfterStop();
   if (I.status === 'alarm') { setMsg('ALARM ' + I.alarm.code + ' (line ' + I.alarm.line + '): ' + I.alarm.msg, 'alarm'); ceReport('alarm', I.alarm.line, I.alarm.code, I.alarm.msg); }
   else if (I.status === 'done') { var dm = 'Program end. ' + I.motion.length + ' motion segments, est. ' + fmtTime(I.cycleTime) + (function () { var d = timeByTool(); if (!d || !d.rows.length || d.rows[0].s / d.total < 0.5) return ''; return '. ' + (d.rows[0].t ? 'T' + pad4(d.rows[0].t) : 'One tool') + ' is ' + Math.round(d.rows[0].s / d.total * 100) + '% of it'; })(); setMsg(dm, 'ok'); ceReport('done', 0, '', dm); }
   else if (I.status === 'stopped') setMsg((I.message || 'Stopped') + ' — Run to resume', 'stop');
@@ -3152,7 +3190,7 @@ function populateSamplesFor(machineNow) {
   Object.keys(set).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = k; sel.appendChild(o); });
   sel.onchange = function () {
     if (!sel.value) return;
-    if (!$('src').value.trim() || confirm('Replace the current program with the sample?')) { $('src').value = set[sel.value]; loadProgram(); }
+    if (!$('src').value.trim() || confirm('Replace the current program with the sample?')) { $('src').value = set[sel.value]; if (machineNow !== 'mill' && /G74/.test(sel.value) && !tools[7].dia && !tools[7].kind) { tools[7].label = 'DRILL .500'; tools[7].kind = 'drill'; tools[7].dia = 0.5; lsSet(LS.tools, tools); renderTools(); } loadProgram(); }
     sel.value = '';
   };
 }
@@ -3169,7 +3207,7 @@ function applyMachineMode(doSwitch) {
   $('machInfoMill').style.display = isMill ? '' : 'none';
   $('legendLathe').style.display = isMill ? 'none' : '';
   $('legendMill').style.display = isMill ? '' : 'none';
-  $('stockRow').style.display = isMill ? 'none' : ''; $('showStockWrap').style.display = isMill ? 'none' : '';
+  $('stockRow').style.display = isMill ? 'none' : ''; $('cutViewWrap').style.display = isMill ? 'none' : ''; $('showPathWrap').style.display = isMill ? 'none' : ''; $('cutAwayWrap').style.display = isMill ? 'none' : ''; $('cutSecBtn').style.display = isMill ? 'none' : ''; if (isMill) { $('cutView').checked = false; $('cutBar').hidden = true; }  $('showStockWrap').style.display = isMill ? 'none' : '';
   $('optStop').parentElement.style.display = isMill ? 'none' : ''; $('optClear100').parentElement.style.display = isMill ? 'none' : '';
   $('toolpathHdr').childNodes[0].textContent = isMill ? 'Toolpath (XYZ) ' : 'Toolpath ';
   populateSamplesFor(machine);
@@ -3186,6 +3224,266 @@ function applyMachineMode(doSwitch) {
   resize();
 }
 $('btnMachine').onclick = function () { applyMachineMode(true); };
+
+/* ---------- material removal preview (lathe) ---------- */
+var CUT = { on: false, mode: 'follow', t: 0, playing: false, last: 0, I: null, key: '', N: 700, z0: 0, z1: 0, outer: null, inner: null, outer0: null, idx: 0, cum: [], tip: null };
+function cutSpeedFactor() { var v = parseFloat($('cutSpeed').value); return v > 0 ? v : Math.max(1, CUT.total() / 3); }
+CUT.total = function () { return CUT.cum.length ? CUT.cum[CUT.cum.length - 1] : 0; };
+CUT.sync = function () {
+  var m = I ? I.motion : [];
+  if (CUT.I !== I || CUT.cum.length > m.length) { CUT.I = I; CUT.cum = []; CUT.key = ''; }
+  var acc = CUT.cum.length ? CUT.cum[CUT.cum.length - 1] : 0;
+  for (var i = CUT.cum.length; i < m.length; i++) { acc += (m[i].time || 0); CUT.cum.push(acc); }
+};
+CUT.reset = function () { CUT.mode = 'follow'; CUT.playing = false; CUT.t = 0; CUT.key = ''; CUT.cum = []; CUT.I = null; };
+CUT.rebuild = function () {
+  CUT.N = Math.max(300, Math.min(2500, Math.round(stock.l / 0.004) + 1)); var N = CUT.N; CUT.z1 = stock.z; CUT.z0 = stock.z - stock.l;
+  CUT.outer = new Float32Array(N); CUT.inner = new Float32Array(N); CUT.outer0 = new Float32Array(N);
+  for (var i = 0; i < N; i++) { CUT.outer[i] = stock.d / 2; CUT.outer0[i] = stock.d / 2; CUT.inner[i] = Math.min(stock.b / 2, stock.d / 2); }
+  CUT.idx = 0; CUT.key = [stock.d, stock.l, stock.b, stock.z, CUT.toolsKey()].join('|');
+};
+/* Densified tool-tip polyline for one motion segment (lines and arcs). Motion X is already a radius. */
+CUT.poly = function (s) {
+  var pts = s.arc ? arcPts(s) : [{ z: s.from.z, x: s.from.x }, { z: s.to.z, x: s.to.x }], out = [{ z: pts[0].z, x: pts[0].x }];
+  for (var i = 1; i < pts.length; i++) {
+    var a = pts[i - 1], b = pts[i], d = Math.hypot(b.z - a.z, b.x - a.x), n = Math.max(1, Math.ceil(d / 0.002));
+    for (var k = 1; k <= n; k++) out.push({ z: a.z + (b.z - a.z) * k / n, x: a.x + (b.x - a.x) * k / n });
+  }
+  return out;
+};
+/* Apply a tool-tip polyline to a radial profile: outer[z] (OD) and inner[z] (bore).
+   A sample belongs to the OD if it is nearer the outer wall than the bore. */
+function toolKind(tl) { if (!tl) return 'turn'; return tl.kind || (/drill/i.test(tl.label || '') ? 'drill' : 'turn'); }
+function toolDia(tl) {
+  if (!tl) return 0; if (tl.dia > 0) return tl.dia;
+  var m = /(\d*\.\d+)/.exec(tl.label || ''); if (m) return parseFloat(m[1]);
+  m = /(\d+)\s*\/\s*(\d+)/.exec(tl.label || ''); return m ? parseFloat(m[1]) / parseFloat(m[2]) : 0;
+}
+function cutToolFor(s) { var o = (s.tool || 0) % 100 || Math.floor((s.tool || 0) / 100); return tools[o]; }
+CUT.toolsKey = function () { var k = []; for (var i = 1; i <= 12; i++) k.push(toolKind(tools[i]) + toolDia(tools[i])); return k.join(','); };
+/* Drill: removes a full-diameter hole (118 deg point) along the tip path. The tip leads; full diameter is reached
+   D/2 / tan(59 deg) behind it. Only counts while the tip is on the spindle centerline. */
+CUT.drill = function (pts, outer, inner, D) {
+  var N = CUT.N, span = CUT.z1 - CUT.z0, rD = D / 2, cone = rD / 1.664, coneN = Math.ceil(cone / span * (N - 1));
+  for (var p = 0; p < pts.length; p++) {
+    var q = pts[p]; if (q.x > rD + 1e-6) continue;
+    var i = Math.round((q.z - CUT.z0) / span * (N - 1));
+    for (var j = Math.max(0, i); j <= Math.min(N - 1, i + coneN); j++) {
+      var zj = CUT.z0 + span * j / (N - 1), r = Math.min(rD, Math.max(0, (zj - q.z)) * 1.664);
+      if (r > inner[j]) inner[j] = Math.min(outer[j], r);
+    }
+  }
+};
+CUT.apply = function (pts, outer, inner, tl) {
+  if (toolKind(tl) === 'drill' && toolDia(tl) > 0) { CUT.drill(pts, outer, inner, toolDia(tl)); return; }
+  var N = CUT.N, span = CUT.z1 - CUT.z0, FACE_ALLOW = 0.15;
+  for (var p = 1; p < pts.length; p++) {
+    var q = pts[p], pr = pts[p - 1], i = Math.round((q.z - CUT.z0) / span * (N - 1));
+    if (i < 0 || i > N - 1) continue;
+    // a radial move exactly ON the stock face plane (facing at Z0 with the stock face at Z0, or a bore starting at Z0) only touches the face: it removes nothing
+    if (q.z >= CUT.z1 - 1e-6 && Math.abs(q.x - pr.x) > 2 * Math.abs(q.z - pr.z) + 1e-9) continue;
+    var x = Math.max(0, q.x), mid = (outer[i] + inner[i]) / 2;
+    if (x >= mid) {
+      if (x < outer[i]) outer[i] = Math.max(inner[i], x);
+      // radial move near the free end = facing: clears the material in front of the tool
+      var radial = Math.abs(q.x - pr.x) > 2 * Math.abs(q.z - pr.z) + 1e-9;
+      if (radial && q.x < pr.x) {
+        var lastJ = N - 1; while (lastJ > i && outer[lastJ] <= inner[lastJ] + 1e-6) lastJ--;
+        if ((lastJ - i) / (N - 1) * span <= FACE_ALLOW) for (var j = i + 1; j <= lastJ; j++) if (outer[j] > x) outer[j] = Math.max(inner[j], x);
+      }
+    } else if (x > inner[i]) inner[i] = Math.min(outer[i], x);
+  }
+};
+/* Bring the profile to the playhead; returns the working copy (base + the partial segment). */
+CUT.state = function () {
+  CUT.sync();
+  var m = I ? I.motion : [], total = CUT.total(), t = CUT.mode === 'follow' ? total : Math.min(CUT.t, total);
+  var key = [stock.d, stock.l, stock.b, stock.z, CUT.toolsKey()].join('|');
+  var lo = 0, hi = CUT.cum.length; while (lo < hi) { var md = (lo + hi) >> 1; if (CUT.cum[md] <= t + 1e-9) lo = md + 1; else hi = md; }
+  var idx = lo; // segments 0..idx-1 are finished
+  if (key !== CUT.key || !CUT.outer || idx < CUT.idx) CUT.rebuild();
+  for (var i = CUT.idx; i < idx; i++) if (m[i].type !== 'rapid') CUT.apply(CUT.poly(m[i]), CUT.outer, CUT.inner, cutToolFor(m[i]));
+  CUT.idx = idx;
+  var o = CUT.outer, n = CUT.inner, tip = I ? { z: I.pos.z, x: I.pos.x } : null;
+  if (CUT.mode !== 'follow' && idx < m.length) {
+    var s = m[idx], t0 = idx ? CUT.cum[idx - 1] : 0, f = s.time > 0 ? Math.max(0, Math.min(1, (t - t0) / s.time)) : 1, pts = CUT.poly(s);
+    var tot = 0, L = [0]; for (var k = 1; k < pts.length; k++) { tot += Math.hypot(pts[k].z - pts[k - 1].z, pts[k].x - pts[k - 1].x); L.push(tot); }
+    var cutL = tot * f, part = [pts[0]]; for (k = 1; k < pts.length && L[k] <= cutL; k++) part.push(pts[k]);
+    if (k < pts.length && L[k] > L[k - 1] && cutL > L[k - 1]) { var u = (cutL - L[k - 1]) / (L[k] - L[k - 1]); part.push({ z: pts[k - 1].z + (pts[k].z - pts[k - 1].z) * u, x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * u }); }
+    tip = part[part.length - 1];
+    // the segment being cut right now, trimmed to the tool so the drawn line stops where the tool is
+    CUT.partial = f >= 1 ? null : (function () { var c = {}; for (var key in s) c[key] = s[key]; c.from = s.from; c.to = { z: tip.z, x: tip.x, c: s.to.c }; if (s.comp) return null; return c; })();
+    if (s.type !== 'rapid') { o = new Float32Array(CUT.outer); n = new Float32Array(CUT.inner); CUT.apply(part, o, n, cutToolFor(s)); }
+  } else if (CUT.mode !== 'follow' && idx >= m.length && m.length) tip = { z: m[m.length - 1].to.z, x: m[m.length - 1].to.x };
+  if (CUT.mode === 'follow' || idx >= m.length) CUT.partial = null;
+  CUT.tip = tip; CUT.shownIdx = Math.min(m.length, idx + (CUT.mode !== 'follow' && idx < m.length ? 1 : 0)); CUT.tNow = t;
+  return { o: o, n: n };
+};
+function cutMotion() {
+  if (!CUT.on || !I) return I.motion; CUT.state();
+  var list = I.motion.slice(0, CUT.shownIdx);
+  if (CUT.partial && list.length) list[list.length - 1] = CUT.partial;
+  return list;
+}
+function cutToolPos() { if (CUT.on && CUT.tip) return proj(CUT.tip.z, CUT.tip.x, I.pos.c); return proj(I.pos.z, I.pos.x, I.pos.c); }
+function cutBarUpdate() {
+  var tot = CUT.total(); $('cutTime').textContent = CUT.tNow.toFixed(1) + ' / ' + tot.toFixed(1) + ' s';
+  $('cutScrub').value = tot > 0 ? Math.round(CUT.tNow / tot * 1000) : 1000; $('cutPlay').textContent = CUT.playing ? '❚❚' : '▶';
+}
+/* ---- metal rendering ---- */
+function metalStops(g, dark) {
+  var s = dark ? [[0, '#222a34'], [0.10, '#46515f'], [0.26, '#8d99a8'], [0.36, '#d5dde6'], [0.46, '#a9b4c1'], [0.68, '#6c7886'], [0.88, '#3a4452'], [1, '#1b222b']]
+               : [[0, '#4a5563'], [0.10, '#7b8796'], [0.26, '#b4bec9'], [0.36, '#f4f7fa'], [0.46, '#cfd7e0'], [0.68, '#98a4b2'], [0.88, '#6a7686'], [1, '#434d5a']];
+  s.forEach(function (q) { g.addColorStop(q[0], q[1]); }); return g;
+}
+function drawCutMaterial(col) {
+  if (!CUT.on || !I) return;
+  var st = CUT.state(), N = CUT.N, o = st.o, n = st.n, span = CUT.z1 - CUT.z0, dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  function zAt(i) { return CUT.z0 + span * i / (N - 1); }
+  ctx.save();
+  if (view === '2d') {
+    // removed material, faint
+    [1, -1].forEach(function (sg) {
+      ctx.beginPath(); for (var i = 0; i < N; i++) { var p = p2d(zAt(i), sg * CUT.outer0[i]); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); }
+      for (i = N - 1; i >= 0; i--) { var q = p2d(zAt(i), sg * o[i]); ctx.lineTo(q[0], q[1]); }
+      ctx.closePath(); ctx.globalAlpha = 0.14; ctx.fillStyle = css('--err'); ctx.fill(); ctx.globalAlpha = 1;
+    });
+    // metal: one gradient strip per ~2px column, shaded as a cylinder of that column's radius
+    var zpx = Math.abs(p2d(zAt(1), 0)[0] - p2d(zAt(0), 0)[0]), stp = Math.max(1, Math.round(2 / Math.max(zpx, 1e-6)));
+    for (var i2 = 0; i2 < N; i2 += stp) {
+      var j2 = Math.min(N - 1, i2 + stp), top = p2d(zAt(i2), o[i2]), bot = p2d(zAt(i2), -o[i2]), x0 = top[0], x1 = p2d(zAt(j2), 0)[0], w = Math.abs(x1 - x0) + 0.8;
+      if (o[i2] <= n[i2] + 1e-6) continue;
+      var g = metalStops(ctx.createLinearGradient(0, top[1], 0, bot[1]), dark), ny = p2d(0, n[i2])[1], nb = p2d(0, -n[i2])[1];
+      ctx.fillStyle = g;
+      if (n[i2] > 1e-6) { ctx.fillRect(Math.min(x0, x1), top[1], w, ny - top[1]); ctx.fillRect(Math.min(x0, x1), nb, w, bot[1] - nb); }
+      else ctx.fillRect(Math.min(x0, x1), top[1], w, bot[1] - top[1]);
+      if (n[i2] > 1e-6) { // bore interior (far wall seen from inside): darker, concave
+        var gi = ctx.createLinearGradient(0, ny, 0, nb); gi.addColorStop(0, dark ? '#10151b' : '#39424e'); gi.addColorStop(0.5, dark ? '#2b343f' : '#6b7683'); gi.addColorStop(1, dark ? '#171d24' : '#444e5a');
+        ctx.fillStyle = gi; ctx.fillRect(Math.min(x0, x1), ny, w, nb - ny);
+      }
+    }
+    // bright edge on every machined surface
+    ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.85; ctx.lineWidth = 1.2;
+    [1, -1].forEach(function (sg) {
+      ctx.beginPath(); for (var i3 = 0; i3 < N; i3++) { var c = p2d(zAt(i3), sg * o[i3]); if (i3) ctx.lineTo(c[0], c[1]); else ctx.moveTo(c[0], c[1]); } ctx.stroke();
+      if (n[N >> 1] > 1e-6 || n[0] > 1e-6 || n[N - 1] > 1e-6) { ctx.beginPath(); for (i3 = 0; i3 < N; i3++) { var e = p2d(zAt(i3), sg * n[i3]); if (i3) ctx.lineTo(e[0], e[1]); else ctx.moveTo(e[0], e[1]); } ctx.stroke(); }
+    });
+    ctx.globalAlpha = 1;
+  } else drawCut3D(o, n, zAt, N, dark);
+  ctx.restore();
+  if (CUT.tip) { var tp2 = proj(CUT.tip.z, CUT.tip.x, I.pos.c); ctx.fillStyle = css('--warn'); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(tp2[0], tp2[1], 4, 0, 6.2832); ctx.fill(); ctx.stroke(); }
+  cutBarUpdate();
+}
+/* 3D: lit, depth-sorted revolved surface (outer skin + bore), with an optional cutaway quarter so holes show. */
+function drawCut3D(o, n, zAt, N, dark) {
+  var A = 60, da = 360 / A, step = Math.max(1, Math.round(N / 64)), ca = Math.cos(cam.az), sa = Math.sin(cam.az), ce = Math.cos(cam.el), se = Math.sin(cam.el);
+  var cmode = $('cutAway').value, cut = cmode !== 'off', ac = cmode === 'half' ? 90 : 58, hw = cmode === 'half' ? 90 : 46; // fixed in the part, so orbiting never changes the shape
+  function inWedge(a) { if (!cut) return false; var d = ((a - ac + 540) % 360) - 180; return Math.abs(d) < hw; }
+  var L = [-0.45, 0.65, 0.62], ll = Math.hypot(L[0], L[1], L[2]); L = [L[0] / ll, L[1] / ll, L[2] / ll];
+  var H = [L[0], L[1], L[2] + 1], hl = Math.hypot(H[0], H[1], H[2]); H = [H[0] / hl, H[1] / hl, H[2] / hl];
+  var faces = [];
+  function addBand(i, j, r0, r1, inward) {
+    var dz = zAt(j) - zAt(i), dr = r1 - r0, len = Math.hypot(dz, dr); if (len < 1e-9) return;
+    var nr = dz / len, nz = -dr / len; if (inward) { nr = -nr; nz = -nz; }
+    if (Math.abs(dr) > 3 * Math.abs(dz)) { nr = 0; nz = nz >= 0 ? 1 : -1; } // shoulder / floor: truly flat, so it shades evenly instead of fanning
+    for (var a = 0; a < A; a++) {
+      var a0 = a * da, a1 = a0 + da, am = (a0 + a1) / 2; if (inWedge(am)) continue;
+      var rad = am * Math.PI / 180, Nx = nr * Math.cos(rad), Ny = nr * Math.sin(rad), Nz = nz;
+      var u = Nz * ca - Ny * sa, v = Nz * sa + Ny * ca, vx = u, vy = Nx * ce - v * se, vz = Nx * se + v * ce;
+      if (vz <= 0.02) continue;
+      var diff = Math.max(0, vx * L[0] + vy * L[1] + vz * L[2]), spec = Math.pow(Math.max(0, vx * H[0] + vy * H[1] + vz * H[2]), 28);
+      var I2 = (dark ? 0.16 : 0.3) + 0.62 * diff, base = dark ? 178 : 196, c = Math.min(255, base * I2 + 255 * 0.55 * spec);
+      var zc = (zAt(i) + zAt(j)) / 2, rc = (r0 + r1) / 2, Y = rc * Math.sin(rad), X = rc * Math.cos(rad), dep = X * se + (zc * sa + Y * ca) * ce;
+      faces.push({ dep: dep, c: c, p: [p3d(zAt(i), r0, a0), p3d(zAt(i), r0, a1), p3d(zAt(j), r1, a1), p3d(zAt(j), r1, a0)] });
+    }
+  }
+  // adaptive bands: one band per straight run of the profile, so a 0.069 counterbore or a thin groove never gets averaged away
+  var tol = 0.0015, bands;
+  function build() { var out = [], i = 0; while (i < N - 1) { var j = i + 1, so = o[j] - o[i], sn = n[j] - n[i]; while (j < N - 1 && Math.abs((o[j + 1] - o[j]) - so) <= tol && Math.abs((n[j + 1] - n[j]) - sn) <= tol) j++; out.push([i, j]); i = j; } return out; }
+  bands = build(); while (bands.length > 420 && tol < 0.2) { tol *= 2; bands = build(); }
+  for (var bi = 0; bi < bands.length; bi++) {
+    var i = bands[bi][0], j = bands[bi][1];
+    if (o[i] > n[i] + 1e-6 || o[j] > n[j] + 1e-6) addBand(i, j, o[i], o[j], false);
+    if (n[i] > 1e-6 || n[j] > 1e-6) addBand(i, j, n[i], n[j], true);
+  }
+  // end caps: the chuck end and the face end are flat annuli (the hole mouth shows as the inner edge)
+  function addCap(i, nzv) {
+    if (o[i] <= n[i] + 1e-6) return;
+    for (var a = 0; a < A; a++) {
+      var a0 = a * da, a1 = a0 + da, am = (a0 + a1) / 2; if (inWedge(am)) continue;
+      var vv = nzv * sa, vx = nzv * ca, vy = -vv * se, vz = vv * ce; if (vz <= 0.02) continue;
+      var diff = Math.max(0, vx * L[0] + vy * L[1] + vz * L[2]), spec = Math.pow(Math.max(0, vx * H[0] + vy * H[1] + vz * H[2]), 28);
+      var c = Math.min(255, (dark ? 178 : 196) * ((dark ? 0.36 : 0.45) + 0.55 * diff) + 255 * 0.5 * spec), rm = (o[i] + n[i]) / 2, rad = am * Math.PI / 180;
+      var dep = rm * Math.cos(rad) * se + (zAt(i) * sa + rm * Math.sin(rad) * ca) * ce;
+      faces.push({ dep: dep, c: c, p: [p3d(zAt(i), n[i], a0), p3d(zAt(i), n[i], a1), p3d(zAt(i), o[i], a1), p3d(zAt(i), o[i], a0)] });
+    }
+  }
+  addCap(N - 1, 1); addCap(0, -1);
+  faces.sort(function (a, b) { return a.dep - b.dep; });
+  for (var f = 0; f < faces.length; f++) {
+    var F = faces[f], c = Math.round(F.c), col = 'rgb(' + c + ',' + Math.min(255, c + 6) + ',' + Math.min(255, c + 14) + ')';
+    ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(F.p[0][0], F.p[0][1]);
+    for (var q = 1; q < 4; q++) ctx.lineTo(F.p[q][0], F.p[q][1]); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  if (cut) { // flat machined section faces at the two wedge edges
+    [[ac - hw, 1], [ac + hw, -1]].forEach(function (pa) {
+      var ang = pa[0], rad = ang * Math.PI / 180, Nx = -Math.sin(rad) * pa[1], Ny = Math.cos(rad) * pa[1], u = -Ny * sa, v = Ny * ca, vx = u, vy = Nx * ce - v * se, vz = Nx * se + v * ce;
+      var diff = Math.max(0, vx * L[0] + vy * L[1] + vz * L[2]), shade = Math.min(255, (dark ? 150 : 175) * ((dark ? 0.3 : 0.4) + 0.7 * diff) + 40), sc = 'rgb(' + Math.round(shade) + ',' + Math.round(Math.min(255, shade + 5)) + ',' + Math.round(Math.min(255, shade + 12)) + ')';
+      ctx.beginPath(); var first = true, i2;
+      var vi = [bands.length ? bands[0][0] : 0]; for (var bk = 0; bk < bands.length; bk++) vi.push(bands[bk][1]); if (vi[vi.length - 1] !== N - 1) vi.push(N - 1); // exact profile breakpoints, always ending on the face row
+      for (var vk = 0; vk < vi.length; vk++) { i2 = vi[vk]; var p = p3d(zAt(i2), o[i2], ang); if (first) { ctx.moveTo(p[0], p[1]); first = false; } else ctx.lineTo(p[0], p[1]); }
+      for (vk = vi.length - 1; vk >= 0; vk--) { i2 = vi[vk]; var q2 = p3d(zAt(i2), n[i2], ang); ctx.lineTo(q2[0], q2[1]); }
+      ctx.closePath(); ctx.fillStyle = sc; ctx.globalAlpha = 1; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = cmode === 'half' ? sc : (dark ? '#eef3f8' : '#ffffff'); ctx.lineWidth = 1; ctx.stroke();
+    });
+  }
+}
+function cutTick(ts) {
+  if (!CUT.playing) return;
+  var dt = CUT.last ? Math.min(0.1, (ts - CUT.last) / 1000) : 0; CUT.last = ts;
+  CUT.t += dt * cutSpeedFactor();
+  if (CUT.t >= CUT.total()) { CUT.t = CUT.total(); CUT.playing = false; }
+  draw(); if (CUT.playing) requestAnimationFrame(cutTick);
+}
+function cutPlayFromStart() { CUT.sync(); CUT.mode = 'replay'; CUT.t = 0; CUT.playing = CUT.total() > 0; CUT.last = 0; draw(); if (CUT.playing) requestAnimationFrame(cutTick); }
+function cutAfterStop() { if (CUT.on && machine !== 'mill' && I && I.status === 'done' && I.motion.length) cutPlayFromStart(); }
+$('cutAway').onchange = draw;
+(function () { // collapsible + resizable side panels (state remembered in this browser)
+  var main = $('main'), left = $('left'), right = $('right');
+  function relayout() { cam.fitDone = false; setTimeout(function () { resize(); }, 0); }
+  function collapse(side, c, save) {
+    var pane = side === 'l' ? left : right, btn = $(side === 'l' ? 'leftToggle' : 'rightToggle');
+    main.classList.toggle(side === 'l' ? 'lc' : 'rc', c); pane.classList.toggle('collapsed', c);
+    btn.textContent = side === 'l' ? (c ? '▶' : '◀ hide') : (c ? '◀' : '▶ hide'); btn.title = (c ? 'Show' : 'Hide') + ' the ' + (side === 'l' ? 'program' : 'side') + ' panel';
+    if (save !== false) lsSet('ams_lathesim_collapse_' + side, c); relayout();
+  }
+  $('leftToggle').onclick = function () { collapse('l', !left.classList.contains('collapsed')); };
+  $('rightToggle').onclick = function () { collapse('r', !right.classList.contains('collapsed')); };
+  function setW(side, w) { if (w == null) main.style.removeProperty(side === 'l' ? '--cl' : '--cr'); else main.style.setProperty(side === 'l' ? '--cl' : '--cr', w + 'px'); }
+  function grip(side) {
+    var g = $(side === 'l' ? 'gripL' : 'gripR'), pane = side === 'l' ? left : right, sx = 0, sw = 0, on = false;
+    g.addEventListener('pointerdown', function (e) { on = true; sx = e.clientX; sw = pane.getBoundingClientRect().width; g.classList.add('drag'); g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointermove', function (e) {
+      if (!on) return; var max = Math.max(280, main.getBoundingClientRect().width * 0.55), w = Math.max(240, Math.min(max, sw + (side === 'l' ? e.clientX - sx : sx - e.clientX)));
+      setW(side, Math.round(w)); relayout();
+    });
+    function end() { if (!on) return; on = false; g.classList.remove('drag'); var v = main.style.getPropertyValue(side === 'l' ? '--cl' : '--cr'); lsSet('ams_lathesim_w_' + side, v ? parseFloat(v) : null); }
+    g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+    g.addEventListener('dblclick', function () { setW(side, null); lsSet('ams_lathesim_w_' + side, null); relayout(); });
+    var saved = lsGet('ams_lathesim_w_' + side, null); if (saved) setW(side, saved);
+  }
+  grip('l'); grip('r');
+  collapse('l', !!lsGet('ams_lathesim_collapse_l', false), false); collapse('r', !!lsGet('ams_lathesim_collapse_r', lsGet('ams_lathesim_rightcollapsed', false)), false);
+})();
+// holes are drilled from the face, so start the 3D orbit looking at the face end (only if the camera is still at the sim's default)
+function cutFaceView() { if (CUT.on && Math.abs(cam.az + 0.6) < 1e-9) { cam.az = 0; cam.el = 0.25; cam.fitDone = false; draw(); } }
+$('cutSecBtn').onclick = function () { if (view !== '3d') $('v3d').click(); cam.az = 0; cam.el = 0; cam.fitDone = false; draw(); };
+$('v3d').addEventListener('click', cutFaceView);
+$('cutView').onchange = function () {
+  CUT.on = this.checked && machine !== 'mill'; $('cutBar').hidden = !CUT.on; resize(); cutFaceView();
+  if (CUT.on) { CUT.mode = 'follow'; if (I && I.status === 'done' && I.motion.length) cutPlayFromStart(); else draw(); } else { CUT.playing = false; draw(); }
+};
+$('cutPlay').onclick = function () { if (CUT.playing) { CUT.playing = false; draw(); } else if (CUT.mode === 'replay' && CUT.t < CUT.total() - 1e-6) { CUT.playing = true; CUT.last = 0; requestAnimationFrame(cutTick); } else cutPlayFromStart(); };
+$('cutScrub').oninput = function () { CUT.sync(); CUT.mode = 'replay'; CUT.playing = false; CUT.t = parseFloat(this.value) / 1000 * CUT.total(); draw(); };
 
 /* ---------- rendering ---------- */
 var cv = $('cv'), ctx = cv.getContext('2d');
@@ -3252,9 +3550,10 @@ function draw() {
       var cz = p3d(z0 - 0.4, 0, 0); ctx.fillStyle = col.muted; ctx.font = '9px monospace'; ctx.fillText('CHUCK', cz[0] - 20, cz[1]);
     }
   }
+  drawCutMaterial(col);
   if (!I) return;
   var showProg = $('showProg').checked;
-  I.motion.forEach(function (s) {
+  (($('showPath').checked) ? cutMotion() : []).forEach(function (s) {
     var c = s.type === 'rapid' ? col.rapid : s.type === 'thread' ? col.thread : col.feed;
     if (s.comp) {
       if (showProg) { ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.setLineDash([4, 3]); strokeSeg(s.prog ? s.prog.from : s.from, s.prog ? s.prog.to : s.to, s.prog && s.arc ? { cz: s.arc.cz, cx: s.arc.cx, r: s.progR || s.arc.r, cw: s.arc.cw } : null, s.from.c, s.to.c); ctx.setLineDash([]); }
@@ -3267,7 +3566,7 @@ function draw() {
     }
   });
   // current tool position
-  var tp = proj(I.pos.z, I.pos.x, I.pos.c); ctx.strokeStyle = css('--text'); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(tp[0] - 6, tp[1]); ctx.lineTo(tp[0] + 6, tp[1]); ctx.moveTo(tp[0], tp[1] - 6); ctx.lineTo(tp[0], tp[1] + 6); ctx.stroke();
+  var tp = cutToolPos(); ctx.strokeStyle = css('--text'); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(tp[0] - 6, tp[1]); ctx.lineTo(tp[0] + 6, tp[1]); ctx.moveTo(tp[0], tp[1] - 6); ctx.lineTo(tp[0], tp[1] + 6); ctx.stroke();
   ctx.fillStyle = col.muted; ctx.font = '10px monospace'; ctx.fillText((view === '2d' ? 'Z → (face right)  X ↑ (radius drawn, diameter shown)' : 'drag to orbit · wheel to zoom') + ' · click a path = jump to its line', 8, 14);
 }
 /* ---------- click a drawn path to jump to the G-code line that produced it ---------- */
@@ -3368,10 +3667,11 @@ function renderStack() {
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 function renderTools() {
   if (machine === 'mill') return renderToolsMill();
-  var h = ['<table><tr><th>T</th><th>Geom X</th><th>Geom Z</th><th>Wear X</th><th>Wear Z</th><th>R</th><th>Tip</th><th>Label</th></tr>'];
-  for (var i = 1; i <= 12; i++) { var t = tools[i]; h.push('<tr><td>' + pad2(i) + '</td>' + ['geomX', 'geomZ', 'wearX', 'wearZ', 'r'].map(function (k) { return '<td><input data-t="' + i + '" data-k="' + k + '" value="' + t[k] + '"></td>'; }).join('') + '<td><input data-t="' + i + '" data-k="tip" value="' + t.tip + '" style="width:36px"></td><td><input data-t="' + i + '" data-k="label" value="' + (t.label || '') + '" style="width:110px;text-align:left"></td></tr>'); }
+  var h = ['<table><tr><th>T</th><th>Geom X</th><th>Geom Z</th><th>Wear X</th><th>Wear Z</th><th>R</th><th>Tip</th><th>Label</th><th title="How the material-removal view cuts with this tool">Cut</th><th title="Drill diameter">Drill Ø</th></tr>'];
+  for (var i = 1; i <= 12; i++) { var t = tools[i]; h.push('<tr><td>' + pad2(i) + '</td>' + ['geomX', 'geomZ', 'wearX', 'wearZ', 'r'].map(function (k) { return '<td><input data-t="' + i + '" data-k="' + k + '" value="' + t[k] + '"></td>'; }).join('') + '<td><input data-t="' + i + '" data-k="tip" value="' + t.tip + '" style="width:36px"></td><td><input data-t="' + i + '" data-k="label" value="' + (t.label || '') + '" style="width:110px;text-align:left"></td><td><select data-t="' + i + '" data-k="kind"><option value="turn"' + (toolKind(t) === 'turn' ? ' selected' : '') + '>Turn</option><option value="drill"' + (toolKind(t) === 'drill' ? ' selected' : '') + '>Drill</option></select></td><td><input data-t="' + i + '" data-k="dia" value="' + (toolKind(t) === 'drill' ? (toolDia(t) || '') : '') + '" style="width:54px"></td></tr>'); }
   h.push('</table>'); $('tools').innerHTML = h.join('');
-  $('tools').querySelectorAll('input').forEach(function (inp) { inp.onchange = function () { var t = tools[+inp.dataset.t], k = inp.dataset.k; t[k] = k === 'label' ? inp.value : (parseFloat(inp.value) || 0); if (k === 'tip') t.tip = Math.max(0, Math.min(9, Math.round(t.tip))); lsSet(LS.tools, tools); }; });
+  $('tools').querySelectorAll('select').forEach(function (sl) { sl.onchange = function () { tools[+sl.dataset.t].kind = sl.value; lsSet(LS.tools, tools); renderTools(); if (CUT.on) draw(); }; });
+  $('tools').querySelectorAll('input').forEach(function (inp) { inp.onchange = function () { var t = tools[+inp.dataset.t], k = inp.dataset.k; t[k] = k === 'label' ? inp.value : (parseFloat(inp.value) || 0); if (k === 'tip') t.tip = Math.max(0, Math.min(9, Math.round(t.tip))); lsSet(LS.tools, tools); if (CUT.on) draw(); }; });
 }
 function renderWork() {
   if (machine === 'mill') return renderWorkMill();
@@ -3443,7 +3743,7 @@ $('btnTests').onclick = runTests; $('testRun').onclick = runTests; $('testClose'
 $('v2d').onclick = function () { view = '2d'; $('v2d').classList.add('on'); $('v3d').classList.remove('on'); cam.fitDone = false; draw(); };
 $('v3d').onclick = function () { view = '3d'; $('v3d').classList.add('on'); $('v2d').classList.remove('on'); cam.fitDone = false; draw(); };
 $('vFit').onclick = function () { cam.fitDone = false; draw(); };
-$('showProg').onchange = draw; $('showStock').onchange = draw;
+$('showProg').onchange = draw; $('showPath').onchange = draw; $('showStock').onchange = draw;
 ['stkD', 'stkL', 'stkB', 'stkZ'].forEach(function (id, i) { var k = ['d', 'l', 'b', 'z'][i]; $(id).value = stock[k]; $(id).onchange = function () { stock[k] = parseFloat($(id).value) || 0; lsSet(LS.stock, stock); cam.fitDone = false; draw(); }; });
 $('optStop').onchange = function () { if (I) I.opts.optionalStop = $('optStop').checked; };
 document.querySelectorAll('.tabs button').forEach(function (b) { b.onclick = function () { document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('on'); }); document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); $('tab-' + b.dataset.tab).classList.add('on'); if (b.dataset.tab === 'log') renderLog(true); else refreshAll(); }; });
@@ -3452,7 +3752,7 @@ $('toolsReset').onclick = function () { if (confirm('Reset all tool offsets to z
 $('workReset').onclick = function () { if (confirm('Zero all work offsets?')) { work = LatheSim.defaultWork(); lsSet(LS.work, work); renderWork(); if (I) I.work = work; } };
 $('clear500').onclick = function () { if (confirm('Set #500–#999 to 0?')) { for (var i = 0; i < 500; i++) p500[i] = 0; lsSet(LS.p500, p500); renderVars(); } };
 var sel = $('samples'); Object.keys(SAMPLES).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = k; sel.appendChild(o); });
-sel.onchange = function () { if (!sel.value) return; if (!$('src').value.trim() || confirm('Replace the current program with the sample?')) { $('src').value = SAMPLES[sel.value]; if (/TNRC/.test(sel.value) && tools[1].r === 0) { tools[1].r = 0.0313; tools[1].tip = 3; lsSet(LS.tools, tools); renderTools(); } loadProgram(); } sel.value = ''; };
+sel.onchange = function () { if (!sel.value) return; if (!$('src').value.trim() || confirm('Replace the current program with the sample?')) { $('src').value = SAMPLES[sel.value]; if (/G74/.test(sel.value) && !tools[7].dia && !tools[7].kind) { tools[7].label = 'DRILL .500'; tools[7].kind = 'drill'; tools[7].dia = 0.5; lsSet(LS.tools, tools); renderTools(); } if (/TNRC/.test(sel.value) && tools[1].r === 0) { tools[1].r = 0.0313; tools[1].tip = 3; lsSet(LS.tools, tools); renderTools(); } loadProgram(); } sel.value = ''; };
 window.addEventListener('keydown', function (e) {
   if (e.key === 'F5') { e.preventDefault(); startRun(); } else if (e.key === 'F10') { e.preventDefault(); stepOnce(); } else if (e.key === 'F11') { e.preventDefault(); stepOver(); }
   else if (e.key === 'Escape') { pauseRun(); } else if (e.ctrlKey && e.shiftKey && (e.key === 'T' || e.key === 't')) { e.preventDefault(); runTests(); }
