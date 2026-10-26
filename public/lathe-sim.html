@@ -1067,7 +1067,7 @@ Interpreter.prototype.output = function (seg, cfrom, cto) {
   var rpm;
   if (this.rotaryOn) { rpm = this.rotaryRpm; }
   else { var rpm0 = this.rpmAtX(seg.from.x), rpm1 = this.rpmAtX(seg.to.x); rpm = (isFinite(rpm0) ? rpm0 : rpm1) * 0.5 + (isFinite(rpm1) ? rpm1 : rpm0) * 0.5; }
-  seg.rpm = rpm; seg.spOn = this.spindleOn; var len;
+  seg.rpm = rpm; seg.spOn = this.spindleOn; seg.live = !!this.rotaryOn; var len;
   if (seg.arc) len = arcSweep(V(seg.from.z, seg.from.x), V(seg.to.z, seg.to.x), V(seg.arc.cz, seg.arc.cx), seg.arc.cw) * seg.arc.r;
   else len = Math.hypot(seg.to.z - seg.from.z, seg.to.x - seg.from.x);
   seg.length = len;
@@ -2913,7 +2913,7 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch
 var SAMPLES = {
   'G71/G70 rough + finish (G96)': '%\nO0001 (G71 ROUGH AND G70 FINISH)\nG20 G40 G99 G54\nT0101\nG50 S3000\nG96 S400 M03\nG00 X2.6 Z0.1\nG71 U0.1 R0.05\nG71 P10 Q20 U0.02 W0.005 F0.012\nN10 G00 X1.0\nG01 Z-0.75 F0.008\nG03 X1.5 Z-1.0 R0.25\nG01 Z-1.5\nX2.0 Z-1.75\nZ-2.5\nN20 X2.6\nG70 P10 Q20\nG00 X6.0 Z4.0\nM30\n%\n',
   'G76 thread 1/2-13 (shop program)': '%\nO0002 (1/2-13 UN 2A EXTERNAL)\nG20 G97 G99 G54\nT0303\nS800 M03\nG00 X0.55 Z0.2\nG76 P020060 Q0050 R0005\nG76 X0.405 Z-1.0 P0472 Q0100 F0.0769\nG00 X6.0 Z4.0\nM30\n%\n',
-  'WHILE bolt pattern (C-axis)': '%\nO0003 (6 HOLES ON A 2.0 BC USING C AXIS)\nG20 G97 G98 G54\nT0505\n#101=6 (HOLES)\n#102=2.0 (BOLT CIRCLE DIA)\n#103=-0.35 (DEPTH)\nG00 X#102 Z0.1\n#1=0\nWHILE[#1LT#101]DO1\nG00 C[#1*360/#101]\nG01 Z#103 F6.0\nG00 Z0.1\n#1=#1+1\nEND1\nG00 X6.0 Z4.0\nM30\n%\n',
+  'WHILE bolt pattern (C-axis)': '%\nO0003 (6 HOLES ON A 2.0 BC USING C AXIS)\nG20 G97 G98 G54\nT0505 (LIVE DRILL)\nS2000 M03 P12 (LIVE TOOL ON)\n#101=6 (HOLES)\n#102=2.0 (BOLT CIRCLE DIA)\n#103=-0.35 (DEPTH)\nG00 X#102 Z0.1\n#1=0\nWHILE[#1LT#101]DO1\nG00 C[#1*360/#101]\nG01 Z#103 F6.0\nG00 Z0.1\n#1=#1+1\nEND1\nM05 P12\nG00 X6.0 Z4.0\nM30\n%\n',
   'G65 argument-driven contour': '%\nO0004 (CALL A CONTOUR MACRO WITH ARGUMENTS)\nG20 G97 G99 G54\nT0101\nS1200 M03\nG00 X2.2 Z0.1\nG65 P9100 A1.0 B1.5 C2.0 D-0.5 E-1.25 F0.008 R0.125\nG00 X6.0 Z4.0\nM30\n\nO9100 (A=DIA1 B=DIA2 C=DIA3 D=Z1 E=Z2 F=FEED R=CORNER)\nIF[#1EQ#0]THEN#3000=1(NO A ARGUMENT)\nG00 X#1\nG01 Z0 F#9\nZ[#7+#18]\nG02 X[#1+2*#18] Z#7 R#18\nG01 X#2\nZ#8\nX#3\nM99\n%\n',
   'TNRC 45 deg taper (r=0.0313 tip 3 on T01)': '%\nO0005 (SET TOOL 1 R0.0313 TIP 3 IN THE TOOLS TAB)\nG20 G97 G99 G54\nT0101\nS800 M03\nG00 X2.0 Z0.5\nG42 G00 X1.0 Z0.1\nG01 Z-0.5 F0.008\nX1.5 Z-0.75\nZ-1.0\nG40 G00 X2.0 Z0.1\nM30\n%\n',
   'Tool life counter (#500s, M98)': '%\nO0006 (COUNTS PARTS IN #601, ALARMS AT #602)\nIF[#602EQ0]THEN#602=50 (DEFAULT LIFE)\n#601=#601+1\nIF[#601GE#602]GOTO900\nM98 P0100\nG00 X6.0 Z4.0\nM30\nN900 #3000=1(TOOL LIFE REACHED)\nM30\n\nO0100\nG20 G97 G99 G54\nT0101\nS1000 M03\nG00 X1.5 Z0.1\nG01 Z-1.0 F0.01\nX1.7\nG00 Z0.1\nM99\n%\n',
@@ -3375,7 +3375,7 @@ CUT.rebuild = function () {
   CUT.N = Math.max(300, Math.min(2500, Math.round(stock.l / 0.004) + 1)); var N = CUT.N; CUT.z1 = stock.z; CUT.z0 = stock.z - stock.l;
   CUT.outer = new Float32Array(N); CUT.inner = new Float32Array(N); CUT.outer0 = new Float32Array(N);
   for (var i = 0; i < N; i++) { CUT.outer[i] = stock.d / 2; CUT.outer0[i] = stock.d / 2; CUT.inner[i] = Math.min(stock.b / 2, stock.d / 2); }
-  CUT.idx = 0; CUT.key = [stock.d, stock.l, stock.b, stock.z, CUT.toolsKey()].join('|');
+  CUT.idx = 0; CUT.holes = []; CUT.key = [stock.d, stock.l, stock.b, stock.z, CUT.toolsKey()].join('|');
 };
 /* Densified tool-tip polyline for one motion segment (lines and arcs). Motion X is already a radius. */
 CUT.poly = function (s) {
@@ -3422,8 +3422,24 @@ CUT.groove = function (pts, outer, inner, w, ref) {
     }
   }
 };
-CUT.apply = function (pts, outer, inner, tl) {
-  if (toolKind(tl) === 'drill' && toolDia(tl) > 0) { CUT.drill(pts, outer, inner, toolDia(tl)); return; }
+/* Off-center holes (live tool on the C axis): the 1-D profile can't hold them, so each is a record {r radius, a C angle, D, zmin}. */
+CUT.holeAdd = function (holes, pts, c, D) {
+  var rD = D / 2;
+  for (var p = 0; p < pts.length; p++) {
+    var q = pts[p]; if (q.x <= rD + 1e-6 || q.z >= CUT.z1) continue;
+    var a = ((c % 360) + 360) % 360, key = Math.round(q.x * 2000) + '|' + Math.round(a * 20) + '|' + Math.round(D * 2000), h = null;
+    for (var k = 0; k < holes.length; k++) if (holes[k].key === key) { h = holes[k]; break; }
+    if (!h) { if (holes.length >= 400) return; h = { key: key, r: q.x, a: a, D: D, zmin: q.z }; holes.push(h); }
+    if (q.z < h.zmin) h.zmin = q.z;
+  }
+};
+CUT.apply = function (pts, outer, inner, tl, seg, holes) {
+  var kd = toolKind(tl) === 'drill' && toolDia(tl) > 0, axial = !!seg && seg.live && Math.abs(seg.to.x - seg.from.x) < 1e-7 && Math.abs(seg.to.z - seg.from.z) > 1e-7 && !seg.arc;
+  if (kd || axial) { // a drill, or any live tool feeding straight along Z (live drill; diameter from the tool table, else 0.25)
+    var Dd = toolDia(tl) > 0 ? toolDia(tl) : 0.25;
+    if (holes && seg) CUT.holeAdd(holes, pts, seg.from.c, Dd);
+    CUT.drill(pts, outer, inner, Dd); return;
+  }
   if (toolKind(tl) === 'groove') { var gg = toolGroove(tl); CUT.groove(pts, outer, inner, gg.w, gg.ref); return; }
   var N = CUT.N, span = CUT.z1 - CUT.z0, FACE_ALLOW = 0.15;
   for (var p = 1; p < pts.length; p++) {
@@ -3451,9 +3467,9 @@ CUT.state = function () {
   var lo = 0, hi = CUT.cum.length; while (lo < hi) { var md = (lo + hi) >> 1; if (CUT.cum[md] <= t + 1e-9) lo = md + 1; else hi = md; }
   var idx = lo; // segments 0..idx-1 are finished
   if (key !== CUT.key || !CUT.outer || idx < CUT.idx) CUT.rebuild();
-  for (var i = CUT.idx; i < idx; i++) if (m[i].type !== 'rapid') CUT.apply(CUT.poly(m[i]), CUT.outer, CUT.inner, cutToolFor(m[i]));
+  for (var i = CUT.idx; i < idx; i++) if (m[i].type !== 'rapid') CUT.apply(CUT.poly(m[i]), CUT.outer, CUT.inner, cutToolFor(m[i]), m[i], CUT.holes);
   CUT.idx = idx;
-  var o = CUT.outer, n = CUT.inner, tip = I ? { z: I.pos.z, x: I.pos.x } : null;
+  var o = CUT.outer, n = CUT.inner, hh = CUT.holes, tip = I ? { z: I.pos.z, x: I.pos.x } : null;
   if (CUT.mode !== 'follow' && idx < m.length) {
     var s = m[idx], t0 = idx ? CUT.cum[idx - 1] : 0, f = s.time > 0 ? Math.max(0, Math.min(1, (t - t0) / s.time)) : 1, pts = CUT.poly(s);
     var tot = 0, L = [0]; for (var k = 1; k < pts.length; k++) { tot += Math.hypot(pts[k].z - pts[k - 1].z, pts[k].x - pts[k - 1].x); L.push(tot); }
@@ -3462,11 +3478,11 @@ CUT.state = function () {
     tip = part[part.length - 1];
     // the segment being cut right now, trimmed to the tool so the drawn line stops where the tool is
     CUT.partial = f >= 1 ? null : (function () { var c = {}; for (var key in s) c[key] = s[key]; c.from = s.from; c.to = { z: tip.z, x: tip.x, c: s.to.c }; if (s.comp) return null; return c; })();
-    if (s.type !== 'rapid') { o = new Float32Array(CUT.outer); n = new Float32Array(CUT.inner); CUT.apply(part, o, n, cutToolFor(s)); }
+    if (s.type !== 'rapid') { o = new Float32Array(CUT.outer); n = new Float32Array(CUT.inner); hh = CUT.holes.map(function (q) { var c = {}; for (var kk in q) c[kk] = q[kk]; return c; }); CUT.apply(part, o, n, cutToolFor(s), s, hh); }
   } else if (CUT.mode !== 'follow' && idx >= m.length && m.length) tip = { z: m[m.length - 1].to.z, x: m[m.length - 1].to.x };
   if (CUT.mode === 'follow' || idx >= m.length) CUT.partial = null;
   CUT.tip = tip; CUT.shownIdx = Math.min(m.length, idx + (CUT.mode !== 'follow' && idx < m.length ? 1 : 0)); CUT.tNow = t;
-  return { o: o, n: n };
+  CUT.hNow = hh; return { o: o, n: n };
 };
 function cutMotion() {
   if (!CUT.on || !I) return I.motion; CUT.state();
@@ -3519,6 +3535,13 @@ function drawCutMaterial(col) {
       if (n[N >> 1] > 1e-6 || n[0] > 1e-6 || n[N - 1] > 1e-6) { ctx.beginPath(); for (i3 = 0; i3 < N; i3++) { var e = p2d(zAt(i3), sg * n[i3]); if (i3) ctx.lineTo(e[0], e[1]); else ctx.moveTo(e[0], e[1]); } ctx.stroke(); }
     });
     ctx.globalAlpha = 1;
+    if (CUT.hNow && CUT.hNow.length) { // off-center holes: hidden-line outlines at their side-view height
+      var jf = N - 1; while (jf > 0 && o[jf] <= n[jf] + 1e-6) jf--; ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = css('--warn'); ctx.lineWidth = 1.2;
+      CUT.hNow.forEach(function (h) {
+        if (h.zmin >= zAt(jf) - 0.002) return; var yy = h.r * Math.cos(h.a * Math.PI / 180), rD = h.D / 2, a = p2d(zAt(jf), yy + rD), b = p2d(h.zmin, yy - rD);
+        ctx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+      }); ctx.restore();
+    }
   } else drawCut3D(o, n, zAt, N, dark);
   ctx.restore();
   if (view === '2d' && $('chuckOn').checked && stock.d > 0) drawChuck2D(dark, true);
@@ -3654,6 +3677,26 @@ function drawCut3D(o, n, zAt, N, dark) {
     ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(F.p[0][0], F.p[0][1]);
     for (var q = 1; q < 4; q++) ctx.lineTo(F.p[q][0], F.p[q][1]); ctx.closePath(); ctx.fill(); ctx.stroke();
   }
+  (function () { // off-center (C-axis) holes drilled into the face
+    var H = CUT.hNow; if (!H || !H.length || sa * ce <= 0.02) return;
+    var j = N - 1; while (j > 0 && o[j] <= n[j] + 1e-6) j--; var zf = zAt(j), M = 28;
+    for (var hi = 0; hi < H.length; hi++) {
+      var h = H[hi], rD = h.D / 2; if (h.zmin >= zf - 0.002 || h.r + rD > o[j] + 0.01 || h.r - rD < n[j] - 0.01 || inWedge(h.a)) continue;
+      var dep = zf - h.zmin, cx = h.r * Math.cos(h.a * Math.PI / 180), cy = h.r * Math.sin(h.a * Math.PI / 180), rim = [], fl = [];
+      for (var k = 0; k <= M; k++) { var th = 2 * Math.PI * k / M, x = cx + rD * Math.cos(th), y = cy + rD * Math.sin(th), r = Math.hypot(x, y), an = Math.atan2(y, x) * 180 / Math.PI; rim.push(p3d(zf + 0.0005, r, an)); fl.push(p3d(zf - dep, r, an)); }
+      ctx.save(); ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.clip();
+      ctx.fillStyle = dark ? '#070a0d' : '#2a313a'; ctx.fillRect(rim[0][0] - 2000, rim[0][1] - 2000, 4000, 4000);
+      for (k = 0; k < M; k++) {
+        var tm = 2 * Math.PI * (k + 0.5) / M, Nx = -Math.cos(tm), Ny = -Math.sin(tm), u = -Ny * sa, v = Ny * ca, vx = u, vy = Nx * ce - v * se, vz = Nx * se + v * ce;
+        if (vz <= 0.02) continue;
+        var df = Math.max(0, vx * L[0] + vy * L[1] + vz * L[2]), cc = Math.round((dark ? 70 : 120) * (0.35 + 0.65 * df)); ctx.fillStyle = 'rgb(' + cc + ',' + (cc + 4) + ',' + (cc + 10) + ')';
+        ctx.beginPath(); ctx.moveTo(rim[k][0], rim[k][1]); ctx.lineTo(rim[k + 1][0], rim[k + 1][1]); ctx.lineTo(fl[k + 1][0], fl[k + 1][1]); ctx.lineTo(fl[k][0], fl[k][1]); ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = dark ? '#161b21' : '#454e59'; ctx.beginPath(); fl.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+  })();
   if (cut) { // flat machined section faces at the two wedge edges
     [[ac - hw, 1], [ac + hw, -1]].forEach(function (pa) {
       var ang = pa[0], rad = ang * Math.PI / 180, Nx = -Math.sin(rad) * pa[1], Ny = Math.cos(rad) * pa[1], u = -Ny * sa, v = Ny * ca, vx = u, vy = Nx * ce - v * se, vz = Nx * se + v * ce;
