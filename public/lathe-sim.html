@@ -3516,7 +3516,7 @@ CUT.holeAdd = function (holes, pts, c, D) {
 /* Side (radial) holes: live tool, or G87/G88/G89, feeding along X at one Z and C angle. {kind:'r', z, a, D, rmin} = hole center Z, C angle, diameter, deepest radius reached. */
 CUT.holeRadial = function (holes, pts, c, D, zc, outer) {
   var N = CUT.N, span = CUT.z1 - CUT.z0, i = Math.round((zc - CUT.z0) / span * (N - 1)); if (i < 0 || i > N - 1) return;
-  var rmin = Infinity; for (var p = 0; p < pts.length; p++) rmin = Math.min(rmin, Math.max(0, pts[p].x));
+  var rmin = Infinity; for (var p = 0; p < pts.length; p++) rmin = Math.min(rmin, pts[p].x);
   if (!(rmin < outer[i] - 1e-6)) return;
   var a = ((c % 360) + 360) % 360, key = 'r|' + Math.round(zc * 2000) + '|' + Math.round(a * 20) + '|' + Math.round(D * 2000), h = null;
   for (var k = 0; k < holes.length; k++) if (holes[k].key === key) { h = holes[k]; break; }
@@ -3595,10 +3595,25 @@ function metalStops(g, dark) {
                : [[0, '#4a5563'], [0.10, '#7b8796'], [0.26, '#b4bec9'], [0.36, '#f4f7fa'], [0.46, '#cfd7e0'], [0.68, '#98a4b2'], [0.88, '#6a7686'], [1, '#434d5a']];
   s.forEach(function (q) { g.addColorStop(q[0], q[1]); }); return g;
 }
+/* A cut that leaves no material at all between two pieces is a part-off: the front piece is drawn lifted away from the rest so it reads as a free disc. */
+CUT.parts = function (o, n, N) {
+  var SH = new Float32Array(N), gap = Math.max(0.15, Math.min(0.5, stock.d * 0.12)), discs = [], i = 0, cur = 0, seen = false, lastMat = -1, k;
+  function empty(q) { return o[q] <= n[q] + 0.012; }
+  while (i < N) {
+    if (!empty(i)) { seen = true; SH[i] = cur; lastMat = i; i++; continue; }
+    var j = i; while (j < N && empty(j)) j++;
+    if (seen && j < N && j - i >= 2) { if (discs.length) discs[discs.length - 1].i1 = lastMat; SH[i] = cur; cur += gap; for (k = i + 1; k < j; k++) SH[k] = cur; discs.push({ i0: j, i1: N - 1 }); }
+    else for (k = i; k < j; k++) SH[k] = cur;
+    i = j;
+  }
+  if (discs.length) discs[discs.length - 1].i1 = Math.max(discs[discs.length - 1].i0, lastMat);
+  return { SH: SH, gap: gap, discs: discs };
+};
+CUT.shiftAt = function (z) { var P = CUT.pNow; if (!P) return 0; var N = CUT.N, i = Math.max(0, Math.min(N - 1, Math.round((z - CUT.z0) / (CUT.z1 - CUT.z0) * (N - 1)))); return P.SH[i]; };
 function drawCutMaterial(col) {
   if (!CUT.on || !I) return;
   var st = CUT.state(), N = CUT.N, o = st.o, n = st.n, span = CUT.z1 - CUT.z0, dark = document.documentElement.getAttribute('data-theme') !== 'light';
-  function zAt(i) { return CUT.z0 + span * i / (N - 1); }
+  CUT.pNow = CUT.parts(o, n, N); var SHA = CUT.pNow.SH;   function zAt(i) { return CUT.z0 + span * i / (N - 1) + SHA[i]; }
   ctx.save();
   if (view === '2d') {
     // removed material, faint
@@ -3635,8 +3650,8 @@ function drawCutMaterial(col) {
         ctx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
       }); ctx.restore();
     }
-    drawSideHoles2D(o, n, zAt, N, dark);
-  } else drawCut3D(o, n, zAt, N, dark);
+    drawSideHoles2D(o, n, zAt, N, dark); drawPartLabels(o, n, zAt, N, function (z, r) { return p2d(z, r); });
+  } else { drawCut3D(o, n, zAt, N, dark); drawPartLabels(o, n, zAt, N, function (z, r) { return p3d(z, r, 90); }); }
   ctx.restore();
   if (view === '2d' && $('chuckOn').checked && stock.d > 0) drawChuck2D(dark, true);
   var area = 0; for (var ai = 0; ai < N; ai++) area += Math.max(0, o[ai] - n[ai]) * 1000 / N;
@@ -3720,26 +3735,42 @@ function chuckFaces3D(dark) {
   return out;
 }
 /* 3D: lit, depth-sorted revolved surface (outer skin + bore), with an optional cutaway quarter so holes show. */
-/* Side holes in the 2D profile: a hole pointing straight up or down is a true notch in the wall; any other angle is a hidden-line outline. */
+/* Side holes in the 2D profile: a hole pointing straight up or down is a true notch in the wall; any other angle is a hidden-line outline.
+   A hole that breaks out into the bore or out the far side is drawn with a cyan outline = it went all the way through. */
+function holeSpan(h, o, n, N) {
+  var span = CUT.z1 - CUT.z0, i = Math.max(0, Math.min(N - 1, Math.round((h.z - CUT.z0) / span * (N - 1)))), ro = o[i], ni = n[i], hollow = ni > 1e-6, rEnd = hollow ? Math.max(h.rmin, ni) : Math.max(h.rmin, -ro);
+  var farTop = hollow && h.rmin < -ni ? -ni : null, farEnd = farTop !== null ? Math.max(h.rmin, -ro) : null;
+  return { i: i, ro: ro, ni: ni, rEnd: rEnd, farTop: farTop, farEnd: farEnd, through: hollow ? h.rmin <= ni + 1e-6 : h.rmin <= -ro + 1e-6, farThrough: farTop !== null && h.rmin <= -ro + 1e-6 };
+}
 function drawSideHoles2D(o, n, zAt, N, dark) {
-  var H = CUT.hNow; if (!H || !H.length) return; var span = CUT.z1 - CUT.z0;
-  ctx.save(); ctx.lineWidth = 1.2;
+  var H = CUT.hNow; if (!H || !H.length) return;
+  ctx.save(); ctx.lineWidth = 1.2; var THR = '#4fd1ff';
   H.forEach(function (h) {
-    if (h.kind !== 'r') return; var i = Math.max(0, Math.min(N - 1, Math.round((h.z - CUT.z0) / span * (N - 1)))), ro = o[i], ri = Math.max(n[i], h.rmin), rD = h.D / 2, cs = Math.cos(h.a * Math.PI / 180), sn = Math.sin(h.a * Math.PI / 180);
-    if (ro <= ri + 1e-6 && n[i] > 0) return;
-    if (Math.abs(sn) < 0.06) { // true side view: a notch in the top (C0) or bottom (C180) wall
-      var sg = cs >= 0 ? 1 : -1, a = p2d(h.z - rD, sg * ro), b = p2d(h.z + rD, sg * ri);
+    if (h.kind !== 'r') return; var q = holeSpan(h, o, n, N), rD = h.D / 2, zs = h.z + (CUT.shiftAt(h.z) || 0), cs = Math.cos(h.a * Math.PI / 180), sn = Math.sin(h.a * Math.PI / 180);
+    if (q.ro <= q.rEnd + 1e-6 && q.ni > 0) return;
+    function band(r0, r1, thru) { // vertical band from radius r0 to r1 (signed along the hole axis), width = diameter
+      var sg = cs >= 0 ? 1 : -1, a = p2d(zs - rD, sg * r0), b = p2d(zs + rD, sg * r1);
       ctx.fillStyle = dark ? '#070a0d' : '#2a313a'; ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
-      ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.85;
-      [h.z - rD, h.z + rD].forEach(function (zz) { var p = p2d(zz, sg * ro), q = p2d(zz, sg * ri); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }); ctx.globalAlpha = 1;
+      ctx.strokeStyle = thru ? THR : (dark ? '#e6edf5' : '#ffffff'); ctx.globalAlpha = 0.9; ctx.lineWidth = thru ? 2 : 1.2;
+      [zs - rD, zs + rD].forEach(function (zz) { var p = p2d(zz, sg * r0), qq = p2d(zz, sg * r1); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(qq[0], qq[1]); ctx.stroke(); }); ctx.globalAlpha = 1; ctx.lineWidth = 1.2;
+    }
+    if (Math.abs(sn) < 0.06) { // true side view: a notch in the top (C0) or bottom (C180) wall
+      band(q.ro, q.rEnd, q.through);
+      if (q.farTop !== null) band(q.farTop, q.farEnd, q.farThrough);
     } else { // hidden-line outline at its projected height
-      ctx.setLineDash([5, 4]); ctx.strokeStyle = css('--warn');
-      var p1 = p2d(h.z - rD, ro * cs), p2 = p2d(h.z + rD, ri * cs);
+      ctx.setLineDash([5, 4]); ctx.strokeStyle = q.through ? THR : css('--warn');
+      var p1 = p2d(zs - rD, q.ro * cs), p2 = p2d(zs + rD, q.rEnd * cs);
       ctx.strokeRect(Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]), Math.abs(p2[0] - p1[0]), Math.max(2, Math.abs(p2[1] - p1[1])));
-      if (Math.abs(sn) > 0.94) { var c0 = p2d(h.z, ro * cs), rp = Math.abs(p2d(h.z + rD, 0)[0] - p2d(h.z, 0)[0]); ctx.beginPath(); ctx.arc(c0[0], c0[1], rp, 0, 6.2832); ctx.stroke(); }
+      if (Math.abs(sn) > 0.94) { var c0 = p2d(zs, q.ro * cs), rp = Math.abs(p2d(zs + rD, 0)[0] - p2d(zs, 0)[0]); ctx.beginPath(); ctx.arc(c0[0], c0[1], rp, 0, 6.2832); ctx.stroke(); }
       ctx.setLineDash([]);
     }
   });
+  ctx.restore();
+}
+/* Label every part-off disc. */
+function drawPartLabels(o, n, zAt, N, proj2) {
+  var P = CUT.pNow; if (!P || !P.discs.length) return; ctx.save(); ctx.font = '700 11px ui-monospace,Consolas,monospace'; ctx.fillStyle = css('--warn'); ctx.textAlign = 'center';
+  P.discs.forEach(function (d) { var zm = (zAt(d.i0) + zAt(d.i1)) / 2, r = 0; for (var k = d.i0; k <= d.i1; k++) r = Math.max(r, o[k]); var p = proj2(zm, r); ctx.fillText('PARTED OFF', p[0], p[1] - 8); });
   ctx.restore();
 }
 function drawCut3D(o, n, zAt, N, dark) {
@@ -3813,26 +3844,34 @@ function drawCut3D(o, n, zAt, N, dark) {
       ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.stroke(); ctx.globalAlpha = 1;
     }
   })();
-  (function () { // side (radial) holes drilled into the outside of the part
-    var HH = CUT.hNow; if (!HH || !HH.length) return; var span = CUT.z1 - CUT.z0, M = 28;
-    HH.forEach(function (h) {
-      if (h.kind !== 'r' || inWedge(h.a)) return;
-      var i = Math.max(0, Math.min(N - 1, Math.round((h.z - CUT.z0) / span * (N - 1)))), ro = o[i], rD = h.D / 2, rf = Math.max(n[i], h.rmin), through = h.rmin <= n[i] + 1e-6;
-      if (ro <= rf + 1e-6 || ro < rD) return;
-      var rad = h.a * Math.PI / 180, Nx = Math.cos(rad), Ny = Math.sin(rad), u = -Ny * sa, v = Ny * ca, vz = Nx * se + v * ce; if (vz <= 0.02) return; // faces away from the camera
-      var rim = [], fl = [];
-      for (var k = 0; k <= M; k++) { var th = 2 * Math.PI * k / M, tz = rD * Math.sin(th), ta = h.a + Math.asin(Math.max(-1, Math.min(1, rD * Math.cos(th) / ro))) * 180 / Math.PI; rim.push(p3d(h.z + tz, ro, ta)); fl.push(p3d(h.z + tz, rf, h.a + (rf > 1e-6 ? Math.asin(Math.max(-1, Math.min(1, rD * Math.cos(th) / Math.max(rf, rD)))) * 180 / Math.PI : 0))); }
+  (function () { // side (radial) holes drilled into the outside of the part; a hole that goes all the way through shows a lit floor
+    var HH = CUT.hNow; if (!HH || !HH.length) return; var M = 28;
+    function drawHole(h, ang, ro, rf, zc, thru) {
+      var rD = h.D / 2; if (inWedge(ang) || ro < rD || Math.abs(ro - rf) < 1e-6) return;
+      var rad = ang * Math.PI / 180, Nx = Math.cos(rad), Ny = Math.sin(rad), v0 = Ny * ca; if (Nx * se + v0 * ce <= 0.02) return; // faces away from the camera
+      var rim = [], fl = [], sgn2 = rf < 0 ? -1 : 1, arf = Math.max(Math.abs(rf), rD);
+      for (var k = 0; k <= M; k++) {
+        var th = 2 * Math.PI * k / M, tz = rD * Math.sin(th), c = Math.max(-1, Math.min(1, rD * Math.cos(th) / ro));
+        rim.push(p3d(zc + tz, ro, ang + Math.asin(c) * 180 / Math.PI));
+        fl.push(p3d(zc + tz, Math.abs(rf), ang + (rf < 0 ? 180 - 0 : 0) + sgn2 * Math.asin(Math.max(-1, Math.min(1, rD * Math.cos(th) / arf))) * 180 / Math.PI));
+      }
       ctx.save(); ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.clip();
       ctx.fillStyle = dark ? '#070a0d' : '#2a313a'; ctx.fillRect(rim[0][0] - 2000, rim[0][1] - 2000, 4000, 4000);
       for (k = 0; k < M; k++) {
-        var tm = 2 * Math.PI * (k + 0.5) / M, wx = -Math.cos(tm) * (-Ny), wy = -Math.cos(tm) * Nx, wz = -Math.sin(tm), uu = wz * ca - wy * sa, vv = wz * sa + wy * ca, vx = uu, vy = wx * ce - vv * se, vz2 = wx * se + vv * ce;
+        var tm = 2 * Math.PI * (k + 0.5) / M, wx = Math.cos(tm) * Ny, wy = -Math.cos(tm) * Nx, wz = -Math.sin(tm), uu = wz * ca - wy * sa, vv = wz * sa + wy * ca, vx = uu, vy = wx * ce - vv * se, vz2 = wx * se + vv * ce;
         if (vz2 <= 0.02) continue;
         var df = Math.max(0, vx * L[0] + vy * L[1] + vz2 * L[2]), cc = Math.round((dark ? 70 : 120) * (0.35 + 0.65 * df)); ctx.fillStyle = 'rgb(' + cc + ',' + (cc + 4) + ',' + (cc + 10) + ')';
         ctx.beginPath(); ctx.moveTo(rim[k][0], rim[k][1]); ctx.lineTo(rim[k + 1][0], rim[k + 1][1]); ctx.lineTo(fl[k + 1][0], fl[k + 1][1]); ctx.lineTo(fl[k][0], fl[k][1]); ctx.closePath(); ctx.fill();
       }
-      if (!through) { ctx.fillStyle = dark ? '#161b21' : '#454e59'; ctx.beginPath(); fl.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.fill(); }
+      ctx.fillStyle = thru ? 'rgba(79,209,255,.55)' : (dark ? '#161b21' : '#454e59'); ctx.beginPath(); fl.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.fill();
       ctx.restore();
-      ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = thru ? '#4fd1ff' : (dark ? '#e6edf5' : '#ffffff'); ctx.globalAlpha = 0.9; ctx.lineWidth = thru ? 1.8 : 1; ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    HH.forEach(function (h) {
+      if (h.kind !== 'r') return; var q = holeSpan(h, o, n, N), zc = h.z + (CUT.shiftAt(h.z) || 0);
+      if (q.ro <= q.rEnd + 1e-6 && q.ni > 0) return;
+      drawHole(h, h.a, q.ro, q.rEnd, zc, q.through);
+      if (q.farThrough) drawHole(h, h.a + 180, q.ro, q.ni, zc, true); // the drill came out of the far wall: show the exit hole (visible from the far side or in a cut-open view)
     });
   })();
   if (cut) { // flat machined section faces at the two wedge edges
