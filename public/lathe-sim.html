@@ -3513,14 +3513,27 @@ CUT.holeAdd = function (holes, pts, c, D) {
     if (q.z < h.zmin) h.zmin = q.z;
   }
 };
+/* Side (radial) holes: live tool, or G87/G88/G89, feeding along X at one Z and C angle. {kind:'r', z, a, D, rmin} = hole center Z, C angle, diameter, deepest radius reached. */
+CUT.holeRadial = function (holes, pts, c, D, zc, outer) {
+  var N = CUT.N, span = CUT.z1 - CUT.z0, i = Math.round((zc - CUT.z0) / span * (N - 1)); if (i < 0 || i > N - 1) return;
+  var rmin = Infinity; for (var p = 0; p < pts.length; p++) rmin = Math.min(rmin, Math.max(0, pts[p].x));
+  if (!(rmin < outer[i] - 1e-6)) return;
+  var a = ((c % 360) + 360) % 360, key = 'r|' + Math.round(zc * 2000) + '|' + Math.round(a * 20) + '|' + Math.round(D * 2000), h = null;
+  for (var k = 0; k < holes.length; k++) if (holes[k].key === key) { h = holes[k]; break; }
+  if (!h) { if (holes.length >= 400) return; h = { kind: 'r', key: key, z: zc, a: a, D: D, rmin: rmin }; holes.push(h); }
+  if (rmin < h.rmin) h.rmin = rmin;
+};
 CUT.apply = function (pts, outer, inner, tl, seg, holes) {
+  if (seg && !seg.arc && Math.abs(seg.to.z - seg.from.z) < 1e-7 && Math.abs(seg.to.x - seg.from.x) > 1e-7 && (seg.live || (seg.cycle >= 87 && seg.cycle <= 89))) { // live tool plunging along X: a side hole, never a groove all the way round
+    if (holes) CUT.holeRadial(holes, pts, seg.from.c, toolDia(tl) > 0 ? toolDia(tl) : 0.25, seg.from.z, outer); return;
+  }
   var kd = toolKind(tl) === 'drill' && toolDia(tl) > 0, axial = !!seg && seg.live && Math.abs(seg.to.x - seg.from.x) < 1e-7 && Math.abs(seg.to.z - seg.from.z) > 1e-7 && !seg.arc;
   if (kd || axial) { // a drill, or any live tool feeding straight along Z (live drill; diameter from the tool table, else 0.25)
     var Dd = toolDia(tl) > 0 ? toolDia(tl) : 0.25;
     if (holes && seg) CUT.holeAdd(holes, pts, seg.from.c, Dd);
     CUT.drill(pts, outer, inner, Dd); return;
   }
-  if (toolKind(tl) === 'groove') { var gg = toolGroove(tl); CUT.groove(pts, outer, inner, gg.w, gg.ref); return; }
+  if (toolKind(tl) === 'groove' || (seg && seg.cycle === 75 && toolKind(tl) === 'turn')) { var gg = toolGroove(tl); CUT.groove(pts, outer, inner, gg.w, gg.ref); return; } // a G75 groove cycle always cuts a blade-wide slot, on the OD or the ID, even if the Cut column was left on turn
   var N = CUT.N, span = CUT.z1 - CUT.z0, FACE_ALLOW = 0.15;
   for (var p = 1; p < pts.length; p++) {
     var q = pts[p], pr = pts[p - 1], i = Math.round((q.z - CUT.z0) / span * (N - 1));
@@ -3618,10 +3631,11 @@ function drawCutMaterial(col) {
     if (CUT.hNow && CUT.hNow.length) { // off-center holes: hidden-line outlines at their side-view height
       var jf = N - 1; while (jf > 0 && o[jf] <= n[jf] + 1e-6) jf--; ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = css('--warn'); ctx.lineWidth = 1.2;
       CUT.hNow.forEach(function (h) {
-        if (h.zmin >= zAt(jf) - 0.002) return; var yy = h.r * Math.cos(h.a * Math.PI / 180), rD = h.D / 2, a = p2d(zAt(jf), yy + rD), b = p2d(h.zmin, yy - rD);
+        if (h.kind === 'r') return; if (h.zmin >= zAt(jf) - 0.002) return; var yy = h.r * Math.cos(h.a * Math.PI / 180), rD = h.D / 2, a = p2d(zAt(jf), yy + rD), b = p2d(h.zmin, yy - rD);
         ctx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
       }); ctx.restore();
     }
+    drawSideHoles2D(o, n, zAt, N, dark);
   } else drawCut3D(o, n, zAt, N, dark);
   ctx.restore();
   if (view === '2d' && $('chuckOn').checked && stock.d > 0) drawChuck2D(dark, true);
@@ -3706,6 +3720,28 @@ function chuckFaces3D(dark) {
   return out;
 }
 /* 3D: lit, depth-sorted revolved surface (outer skin + bore), with an optional cutaway quarter so holes show. */
+/* Side holes in the 2D profile: a hole pointing straight up or down is a true notch in the wall; any other angle is a hidden-line outline. */
+function drawSideHoles2D(o, n, zAt, N, dark) {
+  var H = CUT.hNow; if (!H || !H.length) return; var span = CUT.z1 - CUT.z0;
+  ctx.save(); ctx.lineWidth = 1.2;
+  H.forEach(function (h) {
+    if (h.kind !== 'r') return; var i = Math.max(0, Math.min(N - 1, Math.round((h.z - CUT.z0) / span * (N - 1)))), ro = o[i], ri = Math.max(n[i], h.rmin), rD = h.D / 2, cs = Math.cos(h.a * Math.PI / 180), sn = Math.sin(h.a * Math.PI / 180);
+    if (ro <= ri + 1e-6 && n[i] > 0) return;
+    if (Math.abs(sn) < 0.06) { // true side view: a notch in the top (C0) or bottom (C180) wall
+      var sg = cs >= 0 ? 1 : -1, a = p2d(h.z - rD, sg * ro), b = p2d(h.z + rD, sg * ri);
+      ctx.fillStyle = dark ? '#070a0d' : '#2a313a'; ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+      ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.85;
+      [h.z - rD, h.z + rD].forEach(function (zz) { var p = p2d(zz, sg * ro), q = p2d(zz, sg * ri); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }); ctx.globalAlpha = 1;
+    } else { // hidden-line outline at its projected height
+      ctx.setLineDash([5, 4]); ctx.strokeStyle = css('--warn');
+      var p1 = p2d(h.z - rD, ro * cs), p2 = p2d(h.z + rD, ri * cs);
+      ctx.strokeRect(Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]), Math.abs(p2[0] - p1[0]), Math.max(2, Math.abs(p2[1] - p1[1])));
+      if (Math.abs(sn) > 0.94) { var c0 = p2d(h.z, ro * cs), rp = Math.abs(p2d(h.z + rD, 0)[0] - p2d(h.z, 0)[0]); ctx.beginPath(); ctx.arc(c0[0], c0[1], rp, 0, 6.2832); ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+  });
+  ctx.restore();
+}
 function drawCut3D(o, n, zAt, N, dark) {
   var A = 60, da = 360 / A, step = Math.max(1, Math.round(N / 64)), ca = Math.cos(cam.az), sa = Math.sin(cam.az), ce = Math.cos(cam.el), se = Math.sin(cam.el);
   var cmode = $('cutAway').value, cut = cmode !== 'off', ac = cmode === 'half' ? 90 : cmode === 'quarter' ? 45 : 58, hw = cmode === 'half' ? 90 : cmode === 'quarter' ? 45 : 46; // fixed in the part, so orbiting never changes the shape
@@ -3761,7 +3797,7 @@ function drawCut3D(o, n, zAt, N, dark) {
     var H = CUT.hNow; if (!H || !H.length || sa * ce <= 0.02) return;
     var j = N - 1; while (j > 0 && o[j] <= n[j] + 1e-6) j--; var zf = zAt(j), M = 28;
     for (var hi = 0; hi < H.length; hi++) {
-      var h = H[hi], rD = h.D / 2; if (h.zmin >= zf - 0.002 || h.r + rD > o[j] + 0.01 || h.r - rD < n[j] - 0.01 || inWedge(h.a)) continue;
+      var h = H[hi], rD = h.D / 2; if (h.kind === 'r' || h.zmin >= zf - 0.002 || h.r + rD > o[j] + 0.01 || h.r - rD < n[j] - 0.01 || inWedge(h.a)) continue;
       var dep = zf - h.zmin, cx = h.r * Math.cos(h.a * Math.PI / 180), cy = h.r * Math.sin(h.a * Math.PI / 180), rim = [], fl = [];
       for (var k = 0; k <= M; k++) { var th = 2 * Math.PI * k / M, x = cx + rD * Math.cos(th), y = cy + rD * Math.sin(th), r = Math.hypot(x, y), an = Math.atan2(y, x) * 180 / Math.PI; rim.push(p3d(zf + 0.0005, r, an)); fl.push(p3d(zf - dep, r, an)); }
       ctx.save(); ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.clip();
@@ -3776,6 +3812,28 @@ function drawCut3D(o, n, zAt, N, dark) {
       ctx.restore();
       ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.stroke(); ctx.globalAlpha = 1;
     }
+  })();
+  (function () { // side (radial) holes drilled into the outside of the part
+    var HH = CUT.hNow; if (!HH || !HH.length) return; var span = CUT.z1 - CUT.z0, M = 28;
+    HH.forEach(function (h) {
+      if (h.kind !== 'r' || inWedge(h.a)) return;
+      var i = Math.max(0, Math.min(N - 1, Math.round((h.z - CUT.z0) / span * (N - 1)))), ro = o[i], rD = h.D / 2, rf = Math.max(n[i], h.rmin), through = h.rmin <= n[i] + 1e-6;
+      if (ro <= rf + 1e-6 || ro < rD) return;
+      var rad = h.a * Math.PI / 180, Nx = Math.cos(rad), Ny = Math.sin(rad), u = -Ny * sa, v = Ny * ca, vz = Nx * se + v * ce; if (vz <= 0.02) return; // faces away from the camera
+      var rim = [], fl = [];
+      for (var k = 0; k <= M; k++) { var th = 2 * Math.PI * k / M, tz = rD * Math.sin(th), ta = h.a + Math.asin(Math.max(-1, Math.min(1, rD * Math.cos(th) / ro))) * 180 / Math.PI; rim.push(p3d(h.z + tz, ro, ta)); fl.push(p3d(h.z + tz, rf, h.a + (rf > 1e-6 ? Math.asin(Math.max(-1, Math.min(1, rD * Math.cos(th) / Math.max(rf, rD)))) * 180 / Math.PI : 0))); }
+      ctx.save(); ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.clip();
+      ctx.fillStyle = dark ? '#070a0d' : '#2a313a'; ctx.fillRect(rim[0][0] - 2000, rim[0][1] - 2000, 4000, 4000);
+      for (k = 0; k < M; k++) {
+        var tm = 2 * Math.PI * (k + 0.5) / M, wx = -Math.cos(tm) * (-Ny), wy = -Math.cos(tm) * Nx, wz = -Math.sin(tm), uu = wz * ca - wy * sa, vv = wz * sa + wy * ca, vx = uu, vy = wx * ce - vv * se, vz2 = wx * se + vv * ce;
+        if (vz2 <= 0.02) continue;
+        var df = Math.max(0, vx * L[0] + vy * L[1] + vz2 * L[2]), cc = Math.round((dark ? 70 : 120) * (0.35 + 0.65 * df)); ctx.fillStyle = 'rgb(' + cc + ',' + (cc + 4) + ',' + (cc + 10) + ')';
+        ctx.beginPath(); ctx.moveTo(rim[k][0], rim[k][1]); ctx.lineTo(rim[k + 1][0], rim[k + 1][1]); ctx.lineTo(fl[k + 1][0], fl[k + 1][1]); ctx.lineTo(fl[k][0], fl[k][1]); ctx.closePath(); ctx.fill();
+      }
+      if (!through) { ctx.fillStyle = dark ? '#161b21' : '#454e59'; ctx.beginPath(); fl.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+      ctx.strokeStyle = dark ? '#e6edf5' : '#ffffff'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.beginPath(); rim.forEach(function (p, q) { q ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.stroke(); ctx.globalAlpha = 1;
+    });
   })();
   if (cut) { // flat machined section faces at the two wedge edges
     [[ac - hw, 1], [ac + hw, -1]].forEach(function (pa) {
